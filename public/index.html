@@ -1,9 +1,20 @@
 <!doctype html>
 <html>
   <head>
-    <title>hoi</title>
+    <title>meowmeowmeo</title>
+    <link rel="stylesheet" href="style.css">
   </head>
   <body>
-    <p>woef woef woef woef woef</p>
+    <div class="login-container">
+      <h1>Inloggen</h1>
+      <form id="loginForm">
+        <input type="text" id="username" placeholder="je naam" required>
+        <input type="password" id="password" placeholder="je wachtwoord" required>
+        <button type="submit">in log knop</button>
+      </form>
+      <p id="error" class="error"></p>
+      <p><a href="/register.html">geen account? registreer dan ff</a></p>
+    </div>
+    <script src="app.js"></script>
   </body>
 </html>
