@@ -8,6 +8,7 @@
     "dev": "nodemon src/server.js",
     "db": "postgres\\bin\\pg_ctl -D postgres\\data start",
     "db:stop": "postgres\\bin\\pg_ctl -D postgres\\data stop",
+    "meow": "node src/db.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
