@@ -19,14 +19,6 @@ CREATE TABLE items (
     id SERIAL PRIMARY KEY,
     name VARCHAR(100) NOT NULL,
     description TEXT,
-    price NUMERIC(10, 2),
-    created_at TIMESTAMP DEFAULT NOW()
-);
-
--- derde type ik moet nog uitvogelen wat het wordt
-CREATE TABLE user_items (
-    id SERIAL PRIMARY KEY,
-    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-    item_id INTEGER REFERENCES items(id) ON DELETE CASCADE,
+    price DECIMAL(10, 2),
     created_at TIMESTAMP DEFAULT NOW()
 );
