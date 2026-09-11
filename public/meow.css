@@ -1,0 +1,28 @@
+body {
+  font-family: sans-serif;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  margin: 0;
+  background: #f0f0f0;
+}
+
+
+.dezoekhoek {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.dezoekhoek input {
+  padding: 5px;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+  width: 300px;
+}
+
+.error {
+  color: red;
+  font-size: 0.9em;
+}
