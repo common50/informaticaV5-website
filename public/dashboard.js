@@ -4,30 +4,43 @@ const messages = document.getElementById('messages');
 const chatTitle = document.getElementById('chatTitle');
 const messageBox = document.getElementById('messageBox');
 
-let currentConversationId = null;
+let currentOtherId = null;
 
 async function laadChat() {
-    const res = await fetch(`/api/conversations?userId=${user.id}`);
-    const { conversations } = await res.json();
+    const res = await fetch(`/api/personal-messages?userId=${user.id}`);
+    const rows = await res.json();
 
-    for (const chat of conversations) {
+    const chats = new Map();
+    for (const m of rows) {
+        const otherId = m.sender_id === user.id ? m.recipient_id : m.sender_id;
+        if (!chats.has(otherId)) {
+            chats.set(otherId, m.other_username ?? `gebruiker ${otherId}`);
+        }
+    }
+
+    chatList.innerHTML = '';
+    for (const [otherId, name] of chats) {
         const pancake = document.createElement('li');
         pancake.className = 'chat-item';
-        pancake.textContent = chat.other_user;
-        pancake.addEventListener('click', () => openChat(chat.id, chat.other_user));
+        pancake.textContent = name;
+        pancake.addEventListener('click', () => openChat(otherId, name));
         chatList.appendChild(pancake);
     }
 }
 
 async function openChat(id, name) {
-    currentConversationId = id;
+    currentOtherId = id;
     chatTitle.textContent = name;
     messages.innerHTML = '';
 
-    const res = await fetch(`/api/messages?conversationId=${id}`);
-    const { messages: msgs } = await res.json();
+    const res = await fetch(`/api/personal-messages?userId=${user.id}`);
+    const rows = await res.json();
 
-    for (const m of msgs) {
+    for (const m of rows) {
+        const hoortBijChat = (m.sender_id === user.id && m.recipient_id === id)
+                          || (m.sender_id === id && m.recipient_id === user.id);
+        if (!hoortBijChat) continue;
+
         const meow = document.createElement('div');
         meow.className = m.sender_id === user.id ? 'message sent' : 'message received';
         meow.textContent = m.content;
@@ -37,18 +50,18 @@ async function openChat(id, name) {
 
 async function stuurMsg() {
     const content = messageBox.value.trim();
-    if (!content || !currentConversationId) return;
+    if (!content || !currentOtherId) return;
 
-    await fetch('/api/messages', {
+    await fetch('/api/personal-messages', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ conversationId: currentConversationId, senderId: user.id, content })
+        body: JSON.stringify({ sender_id: user.id, recipient_id: currentOtherId, content })
     });
     messageBox.value = '';
-    openChat(currentConversationId, chatTitle.textContent);
+    openChat(currentOtherId, chatTitle.textContent);
 }
 
 document.getElementById('sendBtn').addEventListener('click', stuurMsg);
 messageBox.addEventListener('keydown', (e) => { if (e.key === 'Enter') stuurMsg(); });
 
-loadChats();
+laadChat();

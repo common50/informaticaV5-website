@@ -49,7 +49,15 @@ app.post('/api/register', async (req, res) => {
 // pb ding
 app.get('/api/personal-messages', async (req, res) => {
   const { userId } = req.query;
-  const result = await pool.query('SELECT * FROM personal_messages WHERE sender_id = $1 OR recipient_id = $1', [userId]);
+  const result = await pool.query(
+    `SELECT pm.*,
+       CASE WHEN pm.sender_id = $1 THEN recipient.username ELSE sender.username END AS other_username
+     FROM personal_messages pm
+     JOIN users sender ON sender.id = pm.sender_id
+     JOIN users recipient ON recipient.id = pm.recipient_id
+     WHERE pm.sender_id = $1 OR pm.recipient_id = $1`,
+    [userId]
+  );
   res.json(result.rows);
 });
 
