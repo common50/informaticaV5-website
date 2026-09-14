@@ -46,6 +46,26 @@ app.post('/api/register', async (req, res) => {
   }
 });
 
+// pb ding
+app.get('/api/personal-messages', async (req, res) => {
+  const { userId } = req.query;
+  const result = await pool.query('SELECT * FROM personal_messages WHERE sender_id = $1 OR recipient_id = $1', [userId]);
+  res.json(result.rows);
+});
+
+app.post('/api/personal-messages', async (req, res) => {
+  const { sender_id, recipient_id, content } = req.body;
+  const result = await pool.query(
+    'INSERT INTO personal_messages (sender_id, recipient_id, content) VALUES ($1, $2, $3) RETURNING id, sender_id, recipient_id, content, created_at',
+    [sender_id, recipient_id, content]
+  );
+  res.json(result.rows[0]);
+});
+
+
+
+//``````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`server runt nu (hopelijk) op http://localhost:${PORT}`);

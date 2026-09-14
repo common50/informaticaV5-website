@@ -5,9 +5,36 @@
     <link rel="stylesheet" href="meow.css">
 </head>
 <body>
-    <p>hoi dit is de dashboard waoisodsajdaksfdsjk</p>
-    <div class="dezoekhoek">
-        <input type="text" placeholder="meow :3">
+    <div class="app">
+        <nav class="icon-rail">
+            <button class="rail-icon active" id="btnChats">💬</button>
+            <button class="rail-icon">👥</button>
+        </nav>
+
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <h2>chats</h2>
+                <div class="dezoekhoek">
+                    <input type="text" placeholder="zoek een chat ofz">
+                </div>
+            </div>
+            <ul class="chat-list" id="chatList">
+            </ul>
+        </aside>
+
+        <main class="chat-view">
+            <header class="chat-header">
+                <h3 id="chatTitle">kies een chat</h3>
+            </header>
+            <div class="messages" id="messages">
+            </div>
+            <div class="message-input">
+                <input type="text" id="messageBox" placeholder="typ een bericht...">
+                <button id="sendBtn">verstuur</button>
+            </div>
+        </main>
     </div>
+
+    <script src="dashboard.js"></script>
 </body>
 </html>
