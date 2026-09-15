@@ -1,3 +1,19 @@
+:root {
+  --bg: #f0f0f0;
+  --card: #ffffff;
+  --text: #1a1a1a;
+  --border: #ccc;
+  --btn: #5b5fc7;
+}
+
+html.dark {
+  --bg: #15151f;
+  --card: #21212f;
+  --text: #e8e8f0;
+  --border: #3a3a4e;
+  --btn: #4a4ead;
+}
+
 body {
   font-family: sans-serif;
   display: flex;
@@ -5,14 +21,15 @@ body {
   align-items: center;
   height: 100vh;
   margin: 0;
-  background: #f0f0f0;
+  background: var(--bg);
 }
 
 .login-container {
-  background: white;
+  background: var(--card);
   padding: 24px;
   border-radius: 4px;
   width: 280px;
+  color: var(--text);
 }
 
 h1 {
@@ -25,20 +42,24 @@ input {
   width: 100%;
   padding: 8px;
   margin: 8px 0;
-  border: 1px solid #ccc;
+  border: 1px solid var(--border);
   border-radius: 2px;
   box-sizing: border-box;
+  background: var(--card);
+  color: var(--text);
 }
 
 button {
   width: 100%;
   padding: 8px;
-  background: #5b5fc7;
+  background: var(--btn);
   color: white;
   border: none;
   border-radius: 2px;
   cursor: pointer;
 }
+
+a { color: var(--btn); }
 
 .error {
   color: red;

@@ -55,7 +55,8 @@ app.get('/api/personal-messages', async (req, res) => {
      FROM personal_messages pm
      JOIN users sender ON sender.id = pm.sender_id
      JOIN users recipient ON recipient.id = pm.recipient_id
-     WHERE pm.sender_id = $1 OR pm.recipient_id = $1`,
+     WHERE pm.sender_id = $1 OR pm.recipient_id = $1
+     ORDER BY pm.id`,
     [userId]
   );
   res.json(result.rows);
@@ -70,6 +71,143 @@ app.post('/api/personal-messages', async (req, res) => {
   res.json(result.rows[0]);
 });
 
+
+
+// gebruikers zoeken (voor de vrienden-dingen)
+app.get('/api/users', async (req, res) => {
+  try {
+    const { q } = req.query;
+    if (!q) return res.json([]);
+    const result = await pool.query(
+      'SELECT id, username FROM users WHERE username ILIKE $1 LIMIT 20',
+      [`%${q}%`]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'oei' });
+  }
+});
+
+// vrienden + vriendverzoeken ophalen
+app.get('/api/friends', async (req, res) => {
+  try {
+    const { userId } = req.query;
+    if (!userId) return res.status(400).json({ error: 'userId nodig' });
+
+    const [accepted, incoming, outgoing] = await Promise.all([
+      pool.query(
+        `SELECT f.friend_id AS other_id, u.username AS other_username, f.created_at
+         FROM friends f JOIN users u ON u.id = f.friend_id
+         WHERE f.user_id = $1 AND f.status = 'accepted'`,
+        [userId]
+      ),
+      pool.query(
+        `SELECT f.user_id AS other_id, u.username AS other_username, f.created_at
+         FROM friends f JOIN users u ON u.id = f.user_id
+         WHERE f.friend_id = $1 AND f.status = 'pending'`,
+        [userId]
+      ),
+      pool.query(
+        `SELECT f.friend_id AS other_id, u.username AS other_username, f.created_at
+         FROM friends f JOIN users u ON u.id = f.friend_id
+         WHERE f.user_id = $1 AND f.status = 'pending'`,
+        [userId]
+      )
+    ]);
+
+    res.json({ friends: accepted.rows, incoming: incoming.rows, outgoing: outgoing.rows });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'oei' });
+  }
+});
+
+// vriendverzoek sturen.
+// als de ander jou AL had gevraagd, wordt het verzoek meteen geaccepteerd.
+app.post('/api/friends', async (req, res) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const { user_id, friend_id } = req.body;
+    if (!user_id || !friend_id || user_id === friend_id) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'iets klopt niet' });
+    }
+
+    const reverse = await client.query(
+      `SELECT id FROM friends WHERE user_id = $1 AND friend_id = $2 AND status = 'pending'`,
+      [friend_id, user_id]
+    );
+
+    if (reverse.rows.length > 0) {
+      await client.query('UPDATE friends SET status = $1 WHERE id = $2', ['accepted', reverse.rows[0].id]);
+      await client.query(
+        `INSERT INTO friends (user_id, friend_id, status) VALUES ($1, $2, 'accepted')
+         ON CONFLICT (user_id, friend_id) DO NOTHING`,
+        [user_id, friend_id]
+      );
+    } else {
+      await client.query(
+        `INSERT INTO friends (user_id, friend_id, status) VALUES ($1, $2, 'pending')
+         ON CONFLICT (user_id, friend_id) DO NOTHING`,
+        [user_id, friend_id]
+      );
+    }
+
+    await client.query('COMMIT');
+    res.json({ ok: true });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error(err);
+    res.status(500).json({ error: 'oei' });
+  } finally {
+    client.release();
+  }
+});
+
+// vriendverzoek accepteren (user_id = degene die accepteert, friend_id = degene die vroeg)
+app.post('/api/friends/accept', async (req, res) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const { user_id, friend_id } = req.body;
+
+    await client.query(
+      `UPDATE friends SET status = 'accepted' WHERE user_id = $1 AND friend_id = $2 AND status = 'pending'`,
+      [friend_id, user_id]
+    );
+    await client.query(
+      `INSERT INTO friends (user_id, friend_id, status) VALUES ($1, $2, 'accepted')
+       ON CONFLICT (user_id, friend_id) DO NOTHING`,
+      [user_id, friend_id]
+    );
+
+    await client.query('COMMIT');
+    res.json({ ok: true });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error(err);
+    res.status(500).json({ error: 'oei' });
+  } finally {
+    client.release();
+  }
+});
+
+// vriendschap verbreken of verzoek afwijzen
+app.delete('/api/friends', async (req, res) => {
+  try {
+    const { user_id, friend_id } = req.body;
+    await pool.query(
+      `DELETE FROM friends WHERE (user_id = $1 AND friend_id = $2) OR (user_id = $2 AND friend_id = $1)`,
+      [user_id, friend_id]
+    );
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'oei' });
+  }
+});
 
 
 //``````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````

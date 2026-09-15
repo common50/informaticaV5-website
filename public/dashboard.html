@@ -3,33 +3,68 @@
 <head>
     <title>dashboard</title>
     <link rel="stylesheet" href="meow.css">
+    <script>
+        document.documentElement.classList.toggle('dark', localStorage.getItem('theme') === 'dark');
+    </script>
 </head>
 <body>
     <div class="app">
         <nav class="icon-rail">
-            <button class="rail-icon active" id="btnChats">💬</button>
-            <button class="rail-icon">👥</button>
+            <button class="rail-icon active" id="btnChats">💬</button> <!-- emojis zijn hier echt wel handig -->
+            <button class="rail-icon" id="btnPeople">👥</button>
+            <button class="rail-icon" id="btnSettings">⚙️</button>
         </nav>
 
         <aside class="sidebar">
-            <div class="sidebar-header">
-                <h2>chats</h2>
-                <div class="dezoekhoek">
-                    <input type="text" placeholder="zoek een chat ofz">
+            <div class="view" id="chatsSidebar">
+                <div class="sidebar-header">
+                    <h2>chats</h2>
+                    <div class="dezoekhoek">
+                        <input type="text" id="chatSearch" placeholder="zoek een chat ofz" autocomplete="off">
+                    </div>
+                </div>
+                <ul class="chat-list" id="chatList"></ul>
+            </div>
+
+            <div class="view hidden" id="peopleSidebar">
+                <div class="sidebar-header">
+                    <h2>mensen</h2>
+                    <div class="dezoekhoek">
+                        <input type="text" id="peopleSearch" placeholder="zoek iem" autocomplete="off">
+                    </div>
+                </div>
+                <div class="chat-list" id="peopleList"></div>
+            </div>
+
+            <div class="view hidden" id="settingsSidebar">
+                <div class="sidebar-header">
+                    <h2>instellingen</h2>
                 </div>
             </div>
-            <ul class="chat-list" id="chatList">
-            </ul>
         </aside>
 
         <main class="chat-view">
             <header class="chat-header">
                 <h3 id="chatTitle">kies een chat</h3>
             </header>
-            <div class="messages" id="messages">
+
+            <div class="messages" id="messages"></div>
+
+            <div class="view settings-panel hidden" id="settingsPanel">
+                <div class="setting-row">
+                    <div>
+                        <h4>donkere modus</h4>
+                        <p>maak alles *duister*</p>
+                    </div>
+                    <label class="switch">
+                        <input type="checkbox" id="darkToggle">
+                        <span class="slider"></span>
+                    </label>
+                </div>
             </div>
+
             <div class="message-input">
-                <input type="text" id="messageBox" placeholder="typ een bericht...">
+                <input type="text" id="messageBox" placeholder="typ typ typ typ">
                 <button id="sendBtn">verstuur</button>
             </div>
         </main>

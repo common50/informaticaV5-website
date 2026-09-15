@@ -5,6 +5,9 @@
 
 -- trwns ik doe de code in het engels want alle documentatie is in het engels
 
+-- test acc en ww:
+-- mittens: iLoveF1sh! whiskers: sayM30w
+
 -- gebruikers
 CREATE TABLE users (
     id SERIAL PRIMARY KEY,
@@ -52,4 +55,18 @@ CREATE TABLE personal_messages (
     created_at TIMESTAMP DEFAULT NOW(),
     FOREIGN KEY (sender_id) REFERENCES users(id),
     FOREIGN KEY (recipient_id) REFERENCES users(id)
+);
+
+-- ja friends is niet echt geschikt voor een professionele setting
+-- maar wat moet ik het anders noemen?? colleagues?
+CREATE TABLE friends (
+    id SERIAL PRIMARY KEY,
+    user_id INT NOT NULL,
+    friend_id INT NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'pending',
+    created_at TIMESTAMP DEFAULT NOW(),
+    FOREIGN KEY (user_id) REFERENCES users(id),
+    FOREIGN KEY (friend_id) REFERENCES users(id),
+    UNIQUE (user_id, friend_id),
+    CHECK (user_id <> friend_id)
 );

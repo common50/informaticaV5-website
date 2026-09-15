@@ -3,6 +3,9 @@
   <head>
     <title>meowmeowmeo</title>
     <link rel="stylesheet" href="style.css">
+    <script>
+        document.documentElement.classList.toggle('dark', localStorage.getItem('theme') === 'dark');
+    </script>
   </head>
   <body>
     <div class="login-container">
