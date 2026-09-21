@@ -1,2 +1,2 @@
 # informaticaV5-website
-website voor informatica project ding
+website voor informatica project
