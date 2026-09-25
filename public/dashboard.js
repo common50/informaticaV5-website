@@ -6,6 +6,8 @@ const chatTitle = document.getElementById('chatTitle');
 const messageBox = document.getElementById('messageBox');
 const peopleSearch = document.getElementById('peopleSearch');
 const chatSearch = document.getElementById('chatSearch');
+const MESSAGE_WRAP_LENGTH = 40;
+const MESSAGE_MAX_LENGTH = 500;
 
 let currentOtherId = null;
 let currentOtherName = 'kies een chat';
@@ -145,6 +147,38 @@ function openChat(id, name) {
     showView('chats');
 }
 
+function wrapMessage(value) {
+    return value
+        .split('\n')
+        .map((line) => line.match(new RegExp(`.{1,${MESSAGE_WRAP_LENGTH}}`, 'g'))?.join('\n') ?? '')
+        .join('\n');
+}
+
+function resizeMessageBox() {
+    messageBox.style.height = 'auto';
+    messageBox.style.height = `${messageBox.scrollHeight}px`;
+}
+
+function wrapMessageBox() {
+    const value = messageBox.value;
+    const start = messageBox.selectionStart;
+    const end = messageBox.selectionEnd;
+    const wrapped = wrapMessage(value);
+    if (wrapped === value) {
+        resizeMessageBox();
+        return;
+    }
+
+    const wrappedStart = wrapMessage(value.slice(0, start)).length;
+    const wrappedEnd = wrapMessage(value.slice(0, end)).length;
+    messageBox.value = wrapped.slice(0, MESSAGE_MAX_LENGTH);
+    messageBox.setSelectionRange(
+        Math.min(wrappedStart, messageBox.value.length),
+        Math.min(wrappedEnd, messageBox.value.length)
+    );
+    resizeMessageBox();
+}
+
 async function stuurMsg() {
     const content = messageBox.value.trim();
     if (!content || !currentOtherId) return;
@@ -155,6 +189,7 @@ async function stuurMsg() {
         body: JSON.stringify({ sender_id: user.id, recipient_id: currentOtherId, content })
     });
     messageBox.value = '';
+    resizeMessageBox();
     refreshAll();
 }
 
@@ -349,6 +384,13 @@ peopleSearch.addEventListener('input', renderPeople);
 chatSearch.addEventListener('input', laadChat);
 
 document.getElementById('sendBtn').addEventListener('click', stuurMsg);
-messageBox.addEventListener('keydown', (e) => { if (e.key === 'Enter') stuurMsg(); });
+messageBox.addEventListener('input', wrapMessageBox);
+messageBox.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        stuurMsg();
+    }
+});
 
 showView('chats');
+resizeMessageBox();
