@@ -70,5 +70,3 @@ CREATE TABLE friends (
     UNIQUE (user_id, friend_id),
     CHECK (user_id <> friend_id)
 );
-
---
