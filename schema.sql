@@ -6,7 +6,7 @@
 -- trwns ik doe de code in het engels want alle documentatie is in het engels
 
 -- test acc en ww:
--- mittens: iLoveF1sh! whiskers: sayM30w
+-- mittens: iLoveF1sh!
 
 -- gebruikers
 CREATE TABLE users (
