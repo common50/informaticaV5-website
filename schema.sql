@@ -9,7 +9,7 @@
 -- voor een bestaande database draai je migrations/002_chats.sql
 
 -- test acc en ww:
--- mittens: iLoveF1sh! whiskers: sayM30w
+-- mittens: iLoveF1sh!
 
 -- gebruikers
 CREATE TABLE users (
