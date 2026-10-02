@@ -12,6 +12,7 @@
         <nav class="icon-rail">
             <button class="rail-icon active" id="btnChats">💬</button> <!-- emojis zijn hier echt wel handig -->
             <button class="rail-icon" id="btnPeople">👥</button>
+            <button class="rail-icon hidden" id="btnAdmin">🛡️</button>
             <button class="rail-icon" id="btnSettings">⚙️</button>
         </nav>
 
@@ -24,6 +25,15 @@
                     </div>
                 </div>
                 <ul class="chat-list" id="chatList"></ul>
+
+                <div class="sidebar-header team-header">
+                    <h2>teams</h2>
+                    <form class="team-form" id="teamForm">
+                        <input type="text" id="teamName" placeholder="nieuw team" maxlength="100" autocomplete="off">
+                        <button type="submit">maak</button>
+                    </form>
+                </div>
+                <ul class="chat-list" id="teamList"></ul>
             </div>
 
             <div class="view hidden" id="peopleSidebar">
@@ -34,6 +44,16 @@
                     </div>
                 </div>
                 <div class="chat-list" id="peopleList"></div>
+            </div>
+
+            <div class="view hidden" id="adminSidebar">
+                <div class="sidebar-header">
+                    <h2>moderatie</h2>
+                    <div class="dezoekhoek">
+                        <input type="text" id="adminSearch" placeholder="zoek user" autocomplete="off">
+                    </div>
+                </div>
+                <div class="chat-list" id="adminUserList"></div>
             </div>
 
             <div class="view hidden" id="settingsSidebar">
@@ -61,11 +81,23 @@
                         <span class="slider"></span>
                     </label>
                 </div>
+                <div class="setting-row">
+                    <div>
+                        <h4>uitloggen</h4>
+                        <p id="whoAmI"></p>
+                    </div>
+                    <button class="btn-sm danger" id="logoutBtn">uitloggen</button>
+                </div>
             </div>
 
-            <div class="message-input">
-                <textarea id="messageBox" rows="1" maxlength="500" placeholder="typ typ typ typ"></textarea>
-                <button id="sendBtn">verstuur</button>
+            <div class="view settings-panel hidden" id="adminPanel"></div>
+
+            <div class="composer hidden" id="composer">
+                <div class="send-error hidden" id="sendError"></div>
+                <div class="message-input">
+                    <textarea id="messageBox" rows="1" maxlength="500" placeholder="typ typ typ typ"></textarea>
+                    <button id="sendBtn">verstuur</button>
+                </div>
             </div>
         </main>
     </div>

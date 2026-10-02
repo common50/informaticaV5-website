@@ -15,7 +15,6 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
     if (!res.ok) {
       oeps.textContent = miauw.error;
     } else {
-      localStorage.setItem('user', JSON.stringify(miauw.user));
       window.location.href = '/dashboard.html';
     }
   } catch {

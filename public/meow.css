@@ -14,6 +14,7 @@
   --input-bg: #ffffff;
   --danger: #d64545;
   --ok: #3fa04f;
+  --warn: #c98a00;
 }
 
 html.dark {
@@ -30,6 +31,7 @@ html.dark {
   --input-bg: #262638;
   --danger: #a0115f;
   --ok: #00a38a;
+  --warn: #d9a441;
 }
 
 body {
@@ -41,6 +43,13 @@ body {
 }
 
 .hidden { display: none !important; }
+
+.view {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
 
 .app {
   display: grid;
@@ -107,6 +116,41 @@ body {
   border-bottom: 1px solid var(--border);
 }
 .chat-item:hover { background: var(--hover); }
+.chat-item.muted-item {
+  color: var(--muted);
+  cursor: default;
+  font-size: 0.85em;
+}
+.chat-item.muted-item:hover { background: none; }
+
+#chatsSidebar #chatList { flex: 1 1 auto; }
+#chatsSidebar #teamList { flex: 0 1 auto; max-height: 40%; }
+
+.team-header {
+  border-top: 1px solid var(--border);
+}
+.team-form {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+.team-form input {
+  flex: 1;
+  min-width: 0;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--input-bg);
+  color: var(--text);
+}
+.team-form button {
+  padding: 6px 10px;
+  background: var(--rail);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
 
 .chat-view {
   display: flex;
@@ -135,6 +179,7 @@ body {
   color: var(--muted);
   margin: auto;
 }
+.hint.padded { padding: 24px 16px; margin: 0; }
 
 .message {
   white-space: pre-wrap;
@@ -156,8 +201,29 @@ body {
   opacity: 0.65;
   margin-top: 3px;
 }
+.message .sender {
+  font-size: 0.7em;
+  opacity: 0.7;
+  margin-bottom: 2px;
+}
 .message.sent .time { text-align: right; }
 .message.received .time { text-align: left; }
+.message.sent .sender { text-align: right; }
+.message.received .sender { text-align: left; }
+
+.composer {
+  display: flex;
+  flex-direction: column;
+}
+
+.send-error {
+  margin: 0 12px 6px;
+  padding: 8px 12px;
+  background: var(--danger);
+  color: white;
+  border-radius: 6px;
+  font-size: 0.85em;
+}
 
 .message-input {
   display: flex;
@@ -216,6 +282,23 @@ body {
   text-overflow: ellipsis;
 }
 .people-item .name:hover { text-decoration: underline; }
+.people-item .name.picked { font-weight: 700; }
+
+.badges {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.pill {
+  font-size: 0.68em;
+  padding: 2px 7px;
+  border-radius: 999px;
+  color: white;
+  white-space: nowrap;
+}
+.pill.rail { background: var(--rail); }
+.pill.warn { background: var(--warn); }
+.pill.danger { background: var(--danger); }
 
 .btn-sm {
   padding: 4px 10px;
