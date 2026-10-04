@@ -7,6 +7,7 @@
 
 -- dit bestand is de complete stand voor een NIEUWE database
 -- voor een bestaande database draai je migrations/002_chats.sql
+-- en daarna migrations/003_hammers_shop.sql
 
 -- test acc en ww:
 -- mittens: iLoveF1sh!
@@ -18,6 +19,7 @@ CREATE TABLE users (
     email VARCHAR(255) UNIQUE NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
     is_admin BOOLEAN NOT NULL DEFAULT FALSE,
+    coins BIGINT NOT NULL DEFAULT 0,
     created_at TIMESTAMP DEFAULT NOW()
 );
 
@@ -131,3 +133,42 @@ CREATE TABLE dm_mutes (
     FOREIGN KEY (muted_by) REFERENCES users(id),
     UNIQUE (thread_key, user_id)
 );
+
+-- de ban hamer: 1x gebruiken en dan is hij stuk
+CREATE TABLE ban_hammers (
+    id SERIAL PRIMARY KEY,
+    owner_id INT NOT NULL,
+    given_by INT NOT NULL,
+    uses_left INT NOT NULL DEFAULT 1 CHECK (uses_left >= 0),
+    created_at TIMESTAMP DEFAULT NOW(),
+    FOREIGN KEY (owner_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (given_by) REFERENCES users(id)
+);
+
+-- alleen de hamers die nog kunnen slaan, dan is de lookup goedkoop
+CREATE INDEX ban_hammers_ready_idx ON ban_hammers(owner_id) WHERE uses_left > 0;
+
+-- wie is er met een hamer op iemand losgegaan
+CREATE TABLE ban_hammer_uses (
+    id SERIAL PRIMARY KEY,
+    hammer_id INT NOT NULL,
+    target_id INT NOT NULL,
+    created_at TIMESTAMP DEFAULT NOW(),
+    FOREIGN KEY (hammer_id) REFERENCES ban_hammers(id) ON DELETE CASCADE,
+    FOREIGN KEY (target_id) REFERENCES users(id)
+);
+
+-- nep microtransactions, dus een "aankoop" met fictief geld
+-- granted_by is NULL als de user het zelf gekocht heeft, anders de admin
+CREATE TABLE microtransactions (
+    id SERIAL PRIMARY KEY,
+    user_id INT NOT NULL,
+    item_key VARCHAR(50) NOT NULL,
+    item_name VARCHAR(100) NOT NULL,
+    price BIGINT NOT NULL,
+    granted_by INT,
+    created_at TIMESTAMP DEFAULT NOW(),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (granted_by) REFERENCES users(id)
+);
+CREATE INDEX microtransactions_user_idx ON microtransactions(user_id, id DESC);
