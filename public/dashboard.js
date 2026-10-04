@@ -10,6 +10,8 @@ const peopleSearch = document.getElementById('peopleSearch');
 const chatSearch = document.getElementById('chatSearch');
 const adminSearch = document.getElementById('adminSearch');
 const adminPanel = document.getElementById('adminPanel');
+const shopPanel = document.getElementById('shopPanel');
+const shopCoins = document.getElementById('shopCoins');
 const MESSAGE_WRAP_LENGTH = 40;
 const MESSAGE_MAX_LENGTH = 500;
 
@@ -39,7 +41,11 @@ async function boot() {
     return;
   }
   me = (await res.json()).user;
-  document.getElementById('whoAmI').textContent = `${me.username} (${me.id})${me.is_admin ? ' · admin 🛡️' : ''}`;
+  rememberCosmetics(me.id, me.cosmetics);
+  const whoAmI = document.getElementById('whoAmI');
+  whoAmI.textContent = '';
+  whoAmI.appendChild(styledName(`${me.username} (${me.id})`, me.cosmetics));
+  if (me.is_admin) whoAmI.append(' · admin 🛡️');
   document.getElementById('btnAdmin').classList.toggle('hidden', !me.is_admin);
   showView('chats');
   resizeMessageBox();
@@ -56,14 +62,15 @@ document.getElementById('darkToggle').checked = document.documentElement.classLi
 
 function showView(name) {
   currentView = name;
-  for (const v of ['chats', 'people', 'admin', 'settings']) {
+  for (const v of ['chats', 'people', 'admin', 'shop', 'settings']) {
     document.getElementById(`${v}Sidebar`).classList.toggle('hidden', v !== name);
   }
   document.getElementById('settingsPanel').classList.toggle('hidden', name !== 'settings');
   adminPanel.classList.toggle('hidden', name !== 'admin');
+  shopPanel.classList.toggle('hidden', name !== 'shop');
   document.getElementById('composer').classList.toggle('hidden', name !== 'chats');
 
-  for (const [btn, view] of [['btnChats', 'chats'], ['btnPeople', 'people'], ['btnAdmin', 'admin'], ['btnSettings', 'settings']]) {
+  for (const [btn, view] of [['btnChats', 'chats'], ['btnPeople', 'people'], ['btnAdmin', 'admin'], ['btnShop', 'shop'], ['btnSettings', 'settings']]) {
     document.getElementById(btn).classList.toggle('active', view === name);
   }
 
@@ -82,6 +89,9 @@ function showView(name) {
     } else if (name === 'admin') {
       chatTitle.textContent = 'moderatie 🛡️';
       renderAdmin();
+    } else if (name === 'shop') {
+      chatTitle.textContent = 'winkel 🛍️';
+      renderShop();
     } else {
       chatTitle.textContent = 'instellingen ⚙️';
     }
@@ -91,6 +101,7 @@ function showView(name) {
 document.getElementById('btnChats').addEventListener('click', () => showView('chats'));
 document.getElementById('btnPeople').addEventListener('click', () => showView('people'));
 document.getElementById('btnAdmin').addEventListener('click', () => showView('admin'));
+document.getElementById('btnShop').addEventListener('click', () => showView('shop'));
 document.getElementById('btnSettings').addEventListener('click', () => showView('settings'));
 
 document.getElementById('logoutBtn').addEventListener('click', async () => {
@@ -170,6 +181,9 @@ async function renderCurrent(rows) {
   }
 
   for (const m of chatRows) {
+    rememberCosmetics(m.sender_id, m.sender_id_cosmetics);
+    rememberCosmetics(m.other_id, m.other_id_cosmetics);
+
     const mine = m.sender_id === me.id && !readOnly;
     const meow = document.createElement('div');
     meow.className = mine ? 'message sent' : 'message received';
@@ -178,7 +192,7 @@ async function renderCurrent(rows) {
     if (currentChat.type === 'team' || readOnly) {
       const wie = document.createElement('div');
       wie.className = 'sender';
-      wie.textContent = m.sender_username ?? `gebruiker ${m.sender_id}`;
+      wie.appendChild(nameSpan(m.sender_username ?? `gebruiker ${m.sender_id}`, undefined, m.sender_id));
       meow.appendChild(wie);
     }
 
@@ -247,7 +261,7 @@ async function renderChatLists(dms, teams) {
   chatList.innerHTML = '';
   for (const [otherId, name] of chats) {
     if (q && !name.toLowerCase().includes(q)) continue;
-    chatList.appendChild(row(`${name}`, () => openDm(otherId, name)));
+    chatList.appendChild(row(`${name}`, () => openDm(otherId, name), otherId));
   }
   if (chatList.children.length === 0) {
     chatList.appendChild(emptyRow(q ? 'niemand gevonden 😿' : 'nog geen chats, zoek iemand via 👥'));
@@ -263,10 +277,13 @@ async function renderChatLists(dms, teams) {
   }
 }
 
-function row(text, onClick) {
+function row(text, onClick, userId) {
   const li = document.createElement('li');
   li.className = 'chat-item';
-  li.textContent = text;
+  const cosmetics = userId == null ? null : cosmeticCache.get(userId);
+  const frame = cosmetics?.frame?.value?.emoji;
+  li.textContent = frame ? `${frame} ${text}` : text;
+  applyCosmetics(li, cosmetics);
   li.addEventListener('click', onClick);
   return li;
 }
@@ -402,7 +419,12 @@ async function stuurMsg() {
 
 async function loadFriends() {
   const data = await json(await api('/api/friends'));
-  if (data) friendData = data;
+  if (data) {
+    friendData = data;
+    rememberAll(data.friends, 'other_id');
+    rememberAll(data.incoming, 'other_id');
+    rememberAll(data.outgoing, 'other_id');
+  }
 }
 
 async function kolomRefresh() {
@@ -425,11 +447,63 @@ function btn(text, cls, onClick) {
   return b;
 }
 
-function nameSpan(text, onClick) {
+//````` cosmetics ```````
+//
+// de server stuurt per user een { slot: { key, value } } mee. die slaan we
+// hier op in een cache, zodat nameSpan ze alleen maar hoeft op te zoeken en
+// niet elke plek waar een naam getekend wordt hoeft te weten waar de data
+// vandaan komt
+
+const cosmeticCache = new Map();
+const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
+
+// onthoud wat iemand draagt. het mag weg, dan valt iemand gewoon terug op
+// een kale naam
+function rememberCosmetics(userId, cosmetics) {
+  if (userId == null) return;
+  if (!cosmetics || Object.keys(cosmetics).length === 0) cosmeticCache.delete(userId);
+  else cosmeticCache.set(userId, cosmetics);
+}
+
+// onthoud voor een hele lijst, bijv { id_cosmetics } bij id
+function rememberAll(rows, idField = 'id') {
+  for (const row of rows) rememberCosmetics(row[idField], row[`${idField}_cosmetics`]);
+}
+
+// de kleuren komen van de server, dus controleer ze toch even voordat we
+// ze in de style zetten. textShadow accepteert elk raaksel van css, en dat
+// willen we niet in een naam
+function applyCosmetics(el, cosmetics) {
+  if (!cosmetics) return el;
+
+  const color = cosmetics.name_color?.value?.color;
+  if (cosmetics.name_color?.value?.rainbow) {
+    el.classList.add('cos-rainbow');
+  } else if (color && HEX_COLOR.test(color)) {
+    el.style.color = color;
+  }
+
+  const glow = cosmetics.glow?.value?.color;
+  if (glow && HEX_COLOR.test(glow)) el.style.textShadow = `0 0 6px ${glow}`;
+
+  return el;
+}
+
+function nameSpan(text, onClick, userId) {
+  const n = styledName(text, userId == null ? null : cosmeticCache.get(userId));
+  if (onClick) n.addEventListener('click', onClick);
+  return n;
+}
+
+// maakt een naam met de cosmetics erop. los van nameSpan, want die wijnter
+// moet een proefje kunnen tonen van hoe je naam eruitziet
+function styledName(text, cosmetics) {
   const n = document.createElement('span'); // ik heb geen idee welke letter ik moet gebruiken ik doe wat goed voelt
   n.className = 'name';
-  n.textContent = text;
-  if (onClick) n.addEventListener('click', onClick);
+  // het frame staat voor de naam, dus die zit in de text en niet er los naast
+  const frame = cosmetics?.frame?.value?.emoji;
+  n.textContent = frame ? `${frame} ${text}` : text;
+  applyCosmetics(n, cosmetics);
   return n;
 }
 
@@ -464,7 +538,7 @@ function incomingItem(r) {
   const d = document.createElement('div');
   d.className = 'people-item';
   d.append(
-    nameSpan(r.other_username, () => openDm(r.other_id, r.other_username)),
+    nameSpan(r.other_username, () => openDm(r.other_id, r.other_username), r.other_id),
     btn('accepteren', 'primary', () => accepteer(r.other_id)),
     btn('nee', 'danger', () => verwijder(r.other_id))
   );
@@ -475,7 +549,7 @@ function outgoingItem(r) {
   const d = document.createElement('div');
   d.className = 'people-item';
   d.append(
-    nameSpan(r.other_username, () => openDm(r.other_id, r.other_username)),
+    nameSpan(r.other_username, () => openDm(r.other_id, r.other_username), r.other_id),
     btn('annuleren', 'ghost', () => verwijder(r.other_id))
   );
   return d;
@@ -485,7 +559,7 @@ function friendItem(f) {
   const d = document.createElement('div');
   d.className = 'people-item';
   d.append(
-    nameSpan(f.other_username, () => openDm(f.other_id, f.other_username)),
+    nameSpan(f.other_username, () => openDm(f.other_id, f.other_username), f.other_id),
     btn('chatten', 'primary', () => openDm(f.other_id, f.other_username)),
     btn('🗑', 'ghost', () => verwijder(f.other_id))
   );
@@ -528,6 +602,7 @@ function emptyBox(text) {
 async function renderSearch(q) {
   peopleList.innerHTML = '';
   const users = (await json(await api(`/api/users?q=${encodeURIComponent(q)}`))) ?? [];
+  rememberAll(users);
 
   const isFriend = (id) => friendData.friends.some((f) => f.other_id === id);
   const isIncoming = (id) => friendData.incoming.some((r) => r.other_id === id);
@@ -541,23 +616,23 @@ async function renderSearch(q) {
 
     if (isFriend(u.id)) {
       d.append(
-        nameSpan(u.username, () => openDm(u.id, u.username)),
+        nameSpan(u.username, () => openDm(u.id, u.username), u.id),
         btn('al vriend 🎉', 'ghost', () => openDm(u.id, u.username))
       );
     } else if (isIncoming(u.id)) {
       d.append(
-        nameSpan(u.username, () => openDm(u.id, u.username)),
+        nameSpan(u.username, () => openDm(u.id, u.username), u.id),
         btn('accepteren', 'primary', () => accepteer(u.id)),
         btn('nee', 'danger', () => verwijder(u.id))
       );
     } else if (isOutgoing(u.id)) {
       d.append(
-        nameSpan(u.username, () => openDm(u.id, u.username)),
+        nameSpan(u.username, () => openDm(u.id, u.username), u.id),
         btn('wachten...', 'ghost')
       );
     } else {
       d.append(
-        nameSpan(u.username),
+        nameSpan(u.username, undefined, u.id),
         btn('voeg toe', 'primary', () => stuurVerzoek(u.id))
       );
     }
@@ -576,7 +651,10 @@ async function renderAdminLists() {
     json(await api('/api/admin/conversations')),
     json(await api('/api/admin/dm-mutes'))
   ]);
-  if (users) adminData = users;
+  if (users) {
+    adminData = users;
+    rememberAll(users);
+  }
   if (convos) adminConvos = convos;
   if (mutes) dmMutes = mutes;
   renderAdminUsers();
@@ -599,7 +677,7 @@ function renderAdminUsers() {
     if (q && !u.username.toLowerCase().includes(q)) continue;
     const d = document.createElement('div');
     d.className = 'people-item';
-    const n = nameSpan(u.username, () => { selectedAdminId = u.id; renderAdminPanel(); });
+    const n = nameSpan(u.username, () => { selectedAdminId = u.id; renderAdminPanel(); }, u.id);
     if (u.id === selectedAdminId) n.classList.add('picked');
     d.append(n, badges(u));
     adminUserList.appendChild(d);
@@ -651,7 +729,8 @@ function renderAdminPanel() {
   kop.className = 'setting-row';
   const info = document.createElement('div');
   const h4 = document.createElement('h4');
-  h4.textContent = u.username + (u.is_admin ? ' · admin' : '');
+  h4.appendChild(nameSpan(u.username, undefined, u.id));
+  if (u.is_admin) h4.append(' · admin');
   const p = document.createElement('p');
   p.textContent = `id ${u.id} · ${u.email}`;
   info.append(h4, p);
@@ -744,6 +823,12 @@ async function demuteInThread(a, b, userId) {
 }
 
 function rowCard(title, sub, action, cls, onClick) {
+  return itemRow(title, sub, btn(action, cls, onClick));
+}
+
+// zelfde rij maar dan met een knop die je al hebt gemaakt, want sommige
+// knoppen moeten disabled kunnen zijn en dat kan rowCard niet
+function itemRow(title, sub, actionBtn) {
   const d = document.createElement('div');
   d.className = 'setting-row';
   const box = document.createElement('div');
@@ -752,8 +837,130 @@ function rowCard(title, sub, action, cls, onClick) {
   const p = document.createElement('p');
   p.textContent = sub;
   box.append(h4, p);
-  d.append(box, btn(action, cls, onClick));
+  d.append(box, actionBtn);
   return d;
+}
+
+//````` winkel ```````
+
+let shopData = { items: [], coins: 0, hammers: [], cosmetics: [], equipped: {}, history: [] };
+
+async function loadShop() {
+  const data = await json(await api('/api/shop'));
+  if (!data) return;
+  shopData = data;
+  // je eigen cosmetics, zodat je eigen naam in de interface ook mooi is
+  rememberCosmetics(me?.id, data.equipped);
+}
+
+// stuur iets naar de server en geef de fout terug als die er is, want json()
+// gooit de error prop weg en dan lijkt het alsof er niets gebeurde
+async function postVerzoek(url, body, options = {}) {
+  const res = await api(url, {
+    method: options.method ?? 'POST',
+    headers: body ? { 'Content-Type': 'application/json' } : undefined,
+    body: body ? JSON.stringify(body) : undefined
+  });
+  if (!res) return null;
+  const data = await res.json().catch(() => null);
+  if (!res.ok) {
+    alert(data?.error ?? 'iets ging mis 😿');
+    return null;
+  }
+  return data;
+}
+
+async function renderShop() {
+  await loadShop();
+
+  shopCoins.textContent = `${shopData.coins} 🪙`;
+  shopPanel.innerHTML = '';
+
+  const owned = new Set(shopData.cosmetics.map((c) => c.item_key));
+  const isOn = (item) => shopData.equipped[item.slot]?.key === item.key;
+
+  // cosmetic uitleggen wat er is, per slot, en dan wat je al hebt
+  shopPanel.appendChild(label('mijn uiterlijk'));
+
+  const slots = [...new Set(shopData.items.filter((i) => i.slot).map((i) => i.slot))];
+  for (const slot of slots) {
+    shopPanel.appendChild(slotLabel(slot));
+
+    for (const item of shopData.items.filter((i) => i.slot === slot)) {
+      const koop = btn(`koop 🪙${item.price}`, 'ghost', () => koopItem(item.key));
+      koop.disabled = owned.has(item.key) || shopData.coins < item.price;
+
+      const actie = !owned.has(item.key)
+        ? koop
+        : btn(isOn(item) ? 'uitdoen' : 'aandoen', isOn(item) ? 'ghost' : 'primary', () =>
+            toggleCosmetics(item.key, isOn(item))
+          );
+
+      shopPanel.appendChild(cosmetiekRow(item, actie));
+    }
+  }
+
+  // en dan de dingen die geen uiterlijk zijn
+  shopPanel.appendChild(label('spul'));
+  for (const item of shopData.items.filter((i) => !i.slot)) {
+    const koop = btn(`koop 🪙${item.price}`, 'primary', () => koopItem(item.key));
+    koop.disabled = shopData.coins < item.price;
+    shopPanel.appendChild(itemRow(item.name, item.blurb ?? '', koop));
+  }
+
+  const hammers = shopData.hammers.filter((h) => Number(h.uses_left) > 0);
+  shopPanel.appendChild(label(`ban hamers (${hammers.length} klaar)`));
+  if (hammers.length === 0) shopPanel.appendChild(emptyBox('geen hamers 😿'));
+  for (const h of hammers) {
+    shopPanel.appendChild(
+      rowCard('🔨 ban hamer', `nog ${Number(h.uses_left)} keer slaan`, 'gebruiken', 'danger', () =>
+        promptHammer(h.id)
+      )
+    );
+  }
+}
+
+function slotLabel(slot) {
+  const naam = { name_color: 'naamkleur', glow: 'gloed', frame: 'frame' }[slot] ?? slot;
+  return label(`${naam} · maximaal 1 aan`);
+}
+
+// een rij voor een cosmetic, met een proefje van hoe je naam er dan uitziet
+function cosmetiekRow(item, actie) {
+  const rij = document.createElement('div');
+  rij.className = 'setting-row';
+
+  const box = document.createElement('div');
+  const h4 = document.createElement('h4');
+  h4.append(styledName('voorbeeld', { [item.slot]: { key: item.key, value: item.value } }));
+
+  const p = document.createElement('p');
+  p.textContent = `${item.blurb ?? ''} · 🪙${item.price}`;
+
+  box.append(h4, p);
+  rij.append(box, actie);
+  return rij;
+}
+
+function promptHammer(hammerId) {
+  const doel = prompt('aan wie wil je slaan? geef het gebruikers-id', '');
+  if (!doel) return;
+  postVerzoek(`/api/hammer/${hammerId}/use`, { target_id: Number(doel) }).then((data) => {
+    if (data) alert('de hamer is gevallen 🫡');
+    renderShop();
+  });
+}
+
+async function koopItem(key) {
+  const data = await postVerzoek('/api/shop/buy', { item_key: key });
+  if (data) await renderShop();
+}
+
+async function toggleCosmetics(key, isOn) {
+  // equipped is de enige waarheid en die komt hier terug, dus gewoon opnieuw
+  // de winkel binnenhalen
+  const done = await postVerzoek(`/api/cosmetics/${isOn ? 'unequip' : 'equip'}`, { item_key: key });
+  if (done) await renderShop();
 }
 
 // luistervinknjesss

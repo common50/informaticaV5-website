@@ -30,6 +30,38 @@ const IMAGE_TYPES = {
   'image/webp': { ext: 'webp', magic: [[0x52, 0x49, 0x46, 0x46], null, [0x57, 0x45, 0x42, 0x50]] }
 };
 
+//````` de winkel ``````
+//
+// dit is de hele catalogus, dus prijzen aanpassen doe je hier en nergens anders.
+// elk item heeft een key (die in de database staat), een naam en een prijs.
+// 'grant' zegt wat er bij een aankoop gebeurt, 'blurb' is voor de winkelruit.
+
+// key moet overal hetzelfde blijven, anders ziet de database het niet als hetzelfde item
+const SHOP_ITEMS = [
+  { key: 'ban_hammer', name: '🔨 ban hamer', price: 5000, grant: 'ban_hammer', blurb: '1x gebruiken en dan is hij stuk' }
+];
+
+// cosmetics zijn de uiterlijke dingen, je koopt ze en doet ze aan.
+// per slot (name_color, glow, frame) mag er maar eentje tegelijk aan staan,
+// de database regelt dat met een partial unique index.
+const COSMETICS = [
+  { key: 'name_red', name: 'rode naam', slot: 'name_color', price: 500, value: { color: '#e5484d' }, blurb: 'jouw naam in het rood' },
+  { key: 'name_green', name: 'groene naam', slot: 'name_color', price: 500, value: { color: '#3fa04f' }, blurb: 'groen, want groen' },
+  { key: 'name_rainbow', name: 'regenboog naam', slot: 'name_color', price: 5000, value: { rainbow: true }, blurb: 'alle kleuren van de regenboog, duur maar wel' },
+
+  { key: 'glow_gold', name: 'gouden gloed', slot: 'glow', price: 2500, value: { color: '#d9a441' }, blurb: 'een warme gouden gloed om je naam' },
+  { key: 'glow_ice', name: 'ijs gloed', slot: 'glow', price: 2500, value: { color: '#6ec6ff' }, blurb: 'koud blauw, net als jouw hart' },
+
+  { key: 'frame_cat', name: 'kattenoren', slot: 'frame', price: 750, value: { emoji: '🐱' }, blurb: 'ooren boven je naam, miauw' },
+  { key: 'frame_crown', name: 'kroon', slot: 'frame', price: 10000, value: { emoji: '👑' }, blurb: 'alleen voor de echte poespunten' },
+  { key: 'frame_devil', name: 'hoorns', slot: 'frame', price: 1500, value: { emoji: '😈' }, blurb: 'iedereen was ooit een keer slecht' }
+];
+
+// de kleuren en klassen uit de catalogus gaan naar de client, dus zorg dat
+// het alleen maar kleuren zijn. als hier ooit iets anders in value komt te
+// staan dan vangt deze het alsnog af
+const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
+
 
 app.use(express.json());
 app.use(express.static('public'));
@@ -73,14 +105,25 @@ app.use(async (req, res, next) => {
   try {
     const result = await pool.query(
       `SELECT u.id, u.username, u.email, u.is_admin, u.coins,
-              EXISTS (SELECT 1 FROM bans b WHERE b.user_id = u.id) AS is_banned
+              EXISTS (SELECT 1 FROM bans b WHERE b.user_id = u.id) AS is_banned,
+              COALESCE((SELECT json_object_agg(c.slot, c.item_key)
+                        FROM user_cosmetics c
+                        WHERE c.user_id = u.id AND c.equipped), '{}'::json) AS equipped_keys
        FROM sessions s JOIN users u ON u.id = s.user_id
        WHERE s.token_hash = $1 AND s.expires_at > NOW()`,
       [hashToken(token)]
     );
     if (result.rows.length > 0) {
       const u = result.rows[0];
-      req.user = { id: u.id, username: u.username, email: u.email, is_admin: u.is_admin, coins: Number(u.coins), is_banned: u.is_banned };
+      req.user = {
+        id: u.id,
+        username: u.username,
+        email: u.email,
+        is_admin: u.is_admin,
+        coins: Number(u.coins),
+        is_banned: u.is_banned,
+        cosmetics: describeEquipped(u.equipped_keys)
+      };
     }
     next();
   } catch (err) {
@@ -185,7 +228,8 @@ app.get('/api/personal-messages', requireAuth, async (req, res) => {
   const me = req.user.id;
   const result = await pool.query(
     `SELECT pm.*,
-       CASE WHEN pm.sender_id = $1 THEN recipient.username ELSE sender.username END AS other_username
+       CASE WHEN pm.sender_id = $1 THEN recipient.username ELSE sender.username END AS other_username,
+       CASE WHEN pm.sender_id = $1 THEN pm.recipient_id ELSE pm.sender_id END AS other_id
      FROM personal_messages pm
      JOIN users sender ON sender.id = pm.sender_id
      JOIN users recipient ON recipient.id = pm.recipient_id
@@ -193,6 +237,7 @@ app.get('/api/personal-messages', requireAuth, async (req, res) => {
      ORDER BY pm.id`,
     [me]
   );
+  await attachCosmetics(result.rows, ['other_id', 'sender_id']);
   res.json(await withImages(result.rows, 'dm_message_images'));
 });
 
@@ -244,7 +289,7 @@ app.get('/api/users', requireAuth, async (req, res) => {
       'SELECT id, username FROM users WHERE username ILIKE $1 ORDER BY username LIMIT 20',
       [`%${q}%`]
     );
-    res.json(result.rows);
+    res.json(await attachCosmetics(result.rows, ['id']));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'oei' });
@@ -276,6 +321,10 @@ app.get('/api/friends', requireAuth, async (req, res) => {
         [userId]
       )
     ]);
+
+    await attachCosmetics(accepted.rows, ['other_id']);
+    await attachCosmetics(incoming.rows, ['other_id']);
+    await attachCosmetics(outgoing.rows, ['other_id']);
 
     res.json({ friends: accepted.rows, incoming: incoming.rows, outgoing: outgoing.rows });
   } catch (err) {
@@ -479,6 +528,7 @@ app.get('/api/teams/:id/messages', requireAuth, async (req, res) => {
        WHERE tm.team_id = $1 ORDER BY tm.id`,
       [req.params.id]
     );
+    await attachCosmetics(result.rows, ['sender_id']);
     res.json(await withImages(result.rows, 'team_message_images'));
   } catch (err) {
     console.error(err);
@@ -702,16 +752,120 @@ app.post('/api/images/sweep', requireAuth, async (req, res) => {
 });
 
 
+//````` winkel, cosmetic uitlezen ``````
+
+// alles wat te koop is, dus gewone items plus cosmetics
+function shopCatalog() {
+  return [...SHOP_ITEMS, ...COSMETICS.map((c) => ({ ...c, grant: 'cosmetic' }))];
+}
+
 function shopItem(key) {
-  return SHOP_ITEMS.find((i) => i.key === key) ?? null;
+  return shopCatalog().find((i) => i.key === key) ?? null;
+}
+
+function cosmeticByKey(key) {
+  return COSMETICS.find((c) => c.key === key) ?? null;
+}
+
+// { name_color: 'name_red' } -> { name_color: { key: 'name_red', value: { color: '#e5484d' } } }
+// dit is wat de client nodig heeft om iets te tekenen, dus hier vertalen we
+// de key uit de database naar wat het eigenlijk is
+function describeEquipped(keys) {
+  const out = {};
+  for (const [slot, key] of Object.entries(keys ?? {})) {
+    const cosmetic = cosmeticByKey(key);
+    // cosmetic bestaat niet meer in de catalogus, of hij hoort niet in dit
+    // slot: dan doen we alsof hij er niet is, anders gaat de client raar doen
+    if (!cosmetic || cosmetic.slot !== slot) continue;
+    out[slot] = { key, value: cosmetic.value };
+  }
+  return out;
+}
+
+async function equippedCosmetics(userId) {
+  const result = await pool.query(
+    'SELECT slot, item_key FROM user_cosmetics WHERE user_id = $1 AND equipped',
+    [userId]
+  );
+  return describeEquipped(Object.fromEntries(result.rows.map((r) => [r.slot, r.item_key])));
+}
+
+// voor lijsten: haal in een keer de cosmetics van alle users op en plak ze
+// eraan. je kunt zelf meerdere id velden meegeven, elk krijgt een veld erbij
+// zoals 'other_id' -> 'other_id_cosmetics'
+async function attachCosmetics(rows, idFields) {
+  const ids = new Set();
+  for (const field of idFields) {
+    for (const row of rows) {
+      if (row[field] != null) ids.add(row[field]);
+    }
+  }
+  if (ids.size === 0) return rows;
+
+  const result = await pool.query(
+    'SELECT user_id, slot, item_key FROM user_cosmetics WHERE equipped AND user_id = ANY($1::int[])',
+    [[...ids]]
+  );
+  const keysPerUser = new Map();
+  for (const row of result.rows) {
+    if (!keysPerUser.has(row.user_id)) keysPerUser.set(row.user_id, {});
+    keysPerUser.get(row.user_id)[row.slot] = row.item_key;
+  }
+
+  for (const row of rows) {
+    for (const field of idFields) {
+      if (row[field] != null) row[`${field}_cosmetics`] = describeEquipped(keysPerUser.get(row[field]));
+    }
+  }
+  return rows;
+}
+
+function grantItem(client, item, userId, grantedBy) {
+  if (item.grant === 'ban_hammer') {
+    return client
+      .query('INSERT INTO ban_hammers (owner_id, given_by) VALUES ($1, $2) RETURNING id, uses_left', [userId, grantedBy])
+      .then((r) => r.rows[0]);
+  }
+  if (item.grant === 'cosmetic') {
+    // bezit blijft, dus als je hem al had staan we gewoon niets te doen.
+    // de slot nemen we uit de catalogus, maar alleen als hij niet gedragen
+    // wordt: een gedragen item verhuizen zou de unique index kunnen klappen
+    return client
+      .query(
+        `INSERT INTO user_cosmetics (user_id, item_key, slot) VALUES ($1, $2, $3)
+         ON CONFLICT (user_id, item_key) DO UPDATE SET slot = EXCLUDED.slot
+         WHERE user_cosmetics.equipped = FALSE`,
+        [userId, item.key, item.slot]
+      )
+      .then(() => ({ cosmetic: item.key }));
+  }
+  return Promise.resolve(null);
+}
+
+function revokeItem(client, item, userId) {
+  if (item.grant === 'ban_hammer') {
+    return client
+      .query('DELETE FROM ban_hammers WHERE owner_id = $1 RETURNING id', [userId])
+      .then((r) => r.rowCount);
+  }
+  if (item.grant === 'cosmetic') {
+    return client
+      .query('DELETE FROM user_cosmetics WHERE user_id = $1 AND item_key = $2 RETURNING item_key', [userId, item.key])
+      .then((r) => r.rowCount);
+  }
+  return Promise.resolve(0);
 }
 
 app.get('/api/shop', requireAuth, async (req, res) => {
   try {
-    const [coins, hammers, historyResult] = await Promise.all([
+    const [coins, hammers, owned, historyResult] = await Promise.all([
       pool.query('SELECT coins FROM users WHERE id = $1', [req.user.id]),
       pool.query(
         'SELECT id, uses_left, created_at FROM ban_hammers WHERE owner_id = $1 ORDER BY id DESC',
+        [req.user.id]
+      ),
+      pool.query(
+        'SELECT item_key, slot, equipped, acquired_at FROM user_cosmetics WHERE user_id = $1 ORDER BY acquired_at',
         [req.user.id]
       ),
       pool.query(
@@ -724,9 +878,11 @@ app.get('/api/shop', requireAuth, async (req, res) => {
     const history = historyResult.rows.map((r) => ({ ...r, price: Number(r.price) }));
 
     res.json({
-      items: SHOP_ITEMS,
+      items: shopCatalog(),
       coins: Number(coins.rows[0]?.coins ?? 0),
       hammers: hammers.rows.map((h) => ({ ...h, uses_left: Number(h.uses_left) })),
+      cosmetics: owned.rows,
+      equipped: await equippedCosmetics(req.user.id),
       history
     });
   } catch (err) {
@@ -743,6 +899,18 @@ app.post('/api/shop/buy', requireAuth, async (req, res) => {
   try {
     await client.query('BEGIN');
 
+    // cosmetic heb je al? dan koop je hem niet nog een keer
+    if (item.grant === 'cosmetic') {
+      const owned = await client.query(
+        'SELECT 1 FROM user_cosmetics WHERE user_id = $1 AND item_key = $2',
+        [req.user.id, item.key]
+      );
+      if (owned.rows.length > 0) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ error: 'die heb je al 😿' });
+      }
+    }
+
     const paid = await client.query(
       'UPDATE users SET coins = coins - $1 WHERE id = $2 AND coins >= $1 RETURNING coins',
       [item.price, req.user.id]
@@ -758,23 +926,91 @@ app.post('/api/shop/buy', requireAuth, async (req, res) => {
       [req.user.id, item.key, item.name, item.price]
     );
 
-    let granted = null;
-    if (item.grant === 'ban_hammer') {
-      const hammer = await client.query(
-        'INSERT INTO ban_hammers (owner_id, given_by) VALUES ($1, $2) RETURNING id, uses_left',
-        [req.user.id, req.user.id]
-      );
-      granted = hammer.rows[0];
-    }
+    const granted = await grantItem(client, item, req.user.id, req.user.id);
 
     await client.query('COMMIT');
-    res.json({ ok: true, coins: Number(paid.rows[0].coins), granted, item_key: item.key });
+    res.json({
+      ok: true,
+      coins: Number(paid.rows[0].coins),
+      granted,
+      item_key: item.key,
+      equipped: await equippedCosmetics(req.user.id)
+    });
   } catch (err) {
     await client.query('ROLLBACK');
     console.error(err);
     res.status(500).json({ error: 'aankoop mislukt' });
   } finally {
     client.release();
+  }
+});
+
+//````` cosmetic aan en uitdoen ```````
+
+app.post('/api/cosmetics/equip', requireAuth, async (req, res) => {
+  const cosmetic = cosmeticByKey(String(req.body?.item_key ?? ''));
+  if (!cosmetic) return res.status(400).json({ error: 'onbekende cosmetic' });
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const owned = await client.query(
+      'SELECT 1 FROM user_cosmetics WHERE user_id = $1 AND item_key = $2',
+      [req.user.id, cosmetic.key]
+    );
+    if (owned.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(403).json({ error: 'die heb je niet, koop hem eerst 😿' });
+    }
+
+    // eerst het slot uit de catalogus wegschrijven, dan pas omzetten. zo repareert
+    // een item dat in server.js naar een ander slot is verhuist zichzelf.
+    // equipped gaat hierbij ook even uit, anders zou de unique index kunnen
+    // klappen als je een gedragen item naar een slot verhuist waar al iets
+    // gedragen wordt. twee stappen verder zetten we het weer aan
+    await client.query(
+      `INSERT INTO user_cosmetics (user_id, item_key, slot, equipped) VALUES ($1, $2, $3, FALSE)
+       ON CONFLICT (user_id, item_key) DO UPDATE SET slot = EXCLUDED.slot, equipped = FALSE`,
+      [req.user.id, cosmetic.key, cosmetic.slot]
+    );
+
+    // twee losse statements, in deze volgorde. in een enkele update zou de
+    // unique index kunnen klappen omdat hij niet weet welke rij hij als
+    // eerste tegenkomt
+    await client.query(
+      'UPDATE user_cosmetics SET equipped = FALSE WHERE user_id = $1 AND slot = $2',
+      [req.user.id, cosmetic.slot]
+    );
+    await client.query(
+      'UPDATE user_cosmetics SET equipped = TRUE WHERE user_id = $1 AND item_key = $2',
+      [req.user.id, cosmetic.key]
+    );
+
+    await client.query('COMMIT');
+    res.json({ ok: true, equipped: await equippedCosmetics(req.user.id) });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error(err);
+    res.status(500).json({ error: 'aandoen mislukt' });
+  } finally {
+    client.release();
+  }
+});
+
+app.post('/api/cosmetics/unequip', requireAuth, async (req, res) => {
+  const cosmetic = cosmeticByKey(String(req.body?.item_key ?? ''));
+  if (!cosmetic) return res.status(400).json({ error: 'onbekende cosmetic' });
+
+  try {
+    await pool.query(
+      'UPDATE user_cosmetics SET equipped = FALSE WHERE user_id = $1 AND item_key = $2',
+      [req.user.id, cosmetic.key]
+    );
+    res.json({ ok: true, equipped: await equippedCosmetics(req.user.id) });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'uitdoen mislukt' });
   }
 });
 
@@ -859,7 +1095,7 @@ app.get('/api/admin/users', requireAdmin, async (req, res) => {
               (SELECT COUNT(*) FROM ban_hammers bh WHERE bh.owner_id = u.id) AS hammers
        FROM users u ORDER BY u.username`
     );
-    res.json(result.rows);
+    res.json(await attachCosmetics(result.rows, ['id']));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'oei' });
@@ -966,14 +1202,7 @@ app.post('/api/admin/users/:id/items', requireAdmin, async (req, res) => {
       [req.params.id, item.key, item.name, 0, req.user.id]
     );
 
-    let granted = null;
-    if (item.grant === 'ban_hammer') {
-      const hammer = await client.query(
-        'INSERT INTO ban_hammers (owner_id, given_by) VALUES ($1, $2) RETURNING id, uses_left',
-        [req.params.id, req.user.id]
-      );
-      granted = hammer.rows[0];
-    }
+    const granted = await grantItem(client, item, req.params.id, req.user.id);
 
     await client.query('COMMIT');
     res.json({ ok: true, granted, item_key: item.key });
@@ -989,22 +1218,27 @@ app.post('/api/admin/users/:id/items', requireAdmin, async (req, res) => {
 app.delete('/api/admin/users/:id/items', requireAdmin, async (req, res) => {
   const item = shopItem(String(req.body?.item_key ?? req.query.item_key ?? ''));
   if (!item) return res.status(400).json({ error: 'onbekend item' });
-  try {
-    const target = await pool.query('SELECT id FROM users WHERE id = $1', [req.params.id]);
-    if (target.rows.length === 0) return res.status(404).json({ error: 'gebruiker bestaat niet' });
 
-    let weggenomen = 0;
-    if (item.grant === 'ban_hammer') {
-      const weg = await pool.query(
-        'DELETE FROM ban_hammers WHERE owner_id = $1 RETURNING id',
-        [req.params.id]
-      );
-      weggenomen = weg.rowCount;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const target = await client.query('SELECT id FROM users WHERE id = $1', [req.params.id]);
+    if (target.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'gebruiker bestaat niet' });
     }
+
+    const weggenomen = await revokeItem(client, item, req.params.id);
+
+    await client.query('COMMIT');
     res.json({ ok: true, weggenomen, item_key: item.key });
   } catch (err) {
+    await client.query('ROLLBACK');
     console.error(err);
     res.status(500).json({ error: 'wegnemen mislukt' });
+  } finally {
+    client.release();
   }
 });
 
@@ -1202,7 +1436,38 @@ app.use((err, req, res, next) => {
   next(err);
 });
 
+// even de catalogus controleren, want een tikfout in een kleur of prijs is
+// lastig te vinden als je alleen maar naar een rare naam kijkt
+function checkCatalog() {
+  const seen = new Set();
+  for (const item of [...SHOP_ITEMS, ...COSMETICS]) {
+    if (!item.key || !/^[a-z0-9_]+$/.test(item.key)) throw new Error(`catalogus: key "${item.key}" is niet lowercase`);
+    if (seen.has(item.key)) throw new Error(`catalogus: key "${item.key}" staat er twee keer in`);
+    seen.add(item.key);
+    if (!Number.isInteger(item.price) || item.price < 0) throw new Error(`catalogus: prijs van "${item.key}" is geen heel getal`);
+    if (item.key.length > 50) throw new Error(`catalogus: key "${item.key}" is te lang voor de kolom (max 50)`);
+  }
+  for (const cosmetic of COSMETICS) {
+    if (!cosmetic.slot) throw new Error(`catalogus: cosmetic "${cosmetic.key}" heeft geen slot`);
+    if (cosmetic.slot.length > 20) throw new Error(`catalogus: slot van "${cosmetic.key}" is te lang voor de kolom (max 20)`);
+    for (const [eigenschap, waarde] of Object.entries(cosmetic.value ?? {})) {
+      // de hele value gaat naar de client, dus controleer dat het kleuren zijn
+      if (eigenschap === 'color' && !HEX_COLOR.test(waarde)) {
+        throw new Error(`catalogus: color van "${cosmetic.key}" is geen #rrggbb`);
+      }
+    }
+  }
+}
+
 const PORT = process.env.PORT || 3000;
+
+try {
+  checkCatalog();
+} catch (err) {
+  console.error(err.message);
+  process.exit(1);
+}
+
 app.listen(PORT, async () => {
   console.log(`server runt nu (hopelijk) op http://localhost:${PORT}`);
   try {

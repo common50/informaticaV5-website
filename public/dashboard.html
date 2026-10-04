@@ -12,6 +12,7 @@
         <nav class="icon-rail">
             <button class="rail-icon active" id="btnChats">💬</button> <!-- emojis zijn hier echt wel handig -->
             <button class="rail-icon" id="btnPeople">👥</button>
+            <button class="rail-icon" id="btnShop">🛍️</button>
             <button class="rail-icon hidden" id="btnAdmin">🛡️</button>
             <button class="rail-icon" id="btnSettings">⚙️</button>
         </nav>
@@ -56,6 +57,13 @@
                 <div class="chat-list" id="adminUserList"></div>
             </div>
 
+            <div class="view hidden" id="shopSidebar">
+                <div class="sidebar-header">
+                    <h2>winkel</h2>
+                    <p class="shop-coins" id="shopCoins">…</p>
+                </div>
+            </div>
+
             <div class="view hidden" id="settingsSidebar">
                 <div class="sidebar-header">
                     <h2>instellingen</h2>
@@ -91,6 +99,8 @@
             </div>
 
             <div class="view settings-panel hidden" id="adminPanel"></div>
+
+            <div class="view settings-panel hidden" id="shopPanel"></div>
 
             <div class="composer hidden" id="composer">
                 <div class="send-error hidden" id="sendError"></div>

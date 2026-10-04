@@ -6,8 +6,8 @@
 -- trwns ik doe de code in het engels want alle documentatie is in het engels
 
 -- dit bestand is de complete stand voor een NIEUWE database
--- voor een bestaande database draai je migrations/002_chats.sql
--- en daarna migrations/003_hammers_shop.sql
+-- voor een bestaande database draai je migrations/002_chats.sql,
+-- migrations/003_hammers_shop.sql en daarna migrations/004_cosmetics.sql
 
 -- test acc en ww:
 -- mittens: iLoveF1sh!
@@ -172,3 +172,21 @@ CREATE TABLE microtransactions (
     FOREIGN KEY (granted_by) REFERENCES users(id)
 );
 CREATE INDEX microtransactions_user_idx ON microtransactions(user_id, id DESC);
+
+-- cosmetics, oftewel uiterlijk verward voor je eigen profiel
+-- de catalogus zelf (prijzen, kleuren, klassen) staat als COSMETICS in src/server.js
+CREATE TABLE user_cosmetics (
+    user_id INT NOT NULL,
+    item_key VARCHAR(50) NOT NULL,
+    -- slot staat hier ook in, al staat het al in de catalogus. zo kan de
+    -- database afdwingen dat je maar één cosmetic per slot draagt
+    slot VARCHAR(20) NOT NULL,
+    equipped BOOLEAN NOT NULL DEFAULT FALSE,
+    acquired_at TIMESTAMP DEFAULT NOW(),
+    PRIMARY KEY (user_id, item_key),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- per slot maximaal een dragen
+CREATE UNIQUE INDEX user_cosmetics_one_per_slot ON user_cosmetics(user_id, slot) WHERE equipped;
+CREATE INDEX user_cosmetics_equipped_idx ON user_cosmetics(user_id) WHERE equipped;

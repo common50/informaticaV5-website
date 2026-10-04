@@ -211,6 +211,26 @@ body {
 .message.sent .sender { text-align: right; }
 .message.received .sender { text-align: left; }
 
+/* cosmetic: regenboog naam. de kleur zit in de tekst zelf, dus het element
+   moet de tekst als achtergrondclippen, anders is de naam onzichtbaar */
+.cos-rainbow {
+  background-image: linear-gradient(90deg, #e5484d, #d9a441, #3fa04f, #6ec6ff, #b45cf0, #e5484d);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  animation: cos-rainbow-shift 4s linear infinite;
+}
+@keyframes cos-rainbow-shift {
+  from { background-position: 0% 50%; }
+  to { background-position: 200% 50%; }
+}
+/* wie geen beweging wil krijgt gewoon de kleuren zonder animatie */
+@media (prefers-reduced-motion: reduce) {
+  .cos-rainbow { animation: none; }
+}
+
 .composer {
   display: flex;
   flex-direction: column;
@@ -330,6 +350,11 @@ body {
 }
 .setting-row h4 { font-size: 1em; margin-bottom: 2px; }
 .setting-row p { font-size: 0.85em; color: var(--muted); }
+
+/* cosmetic: proefje in de winkel, en je eigen naam in de instellingen */
+.setting-row h4 .name, #whoAmI .name { font-weight: 600; }
+.shop-coins { font-size: 0.85em; color: var(--muted); }
+.btn-sm:disabled { opacity: 0.45; cursor: not-allowed; }
 
 .switch { position: relative; display: inline-block; width: 46px; height: 26px; flex-shrink: 0; }
 .switch input { display: none; }
