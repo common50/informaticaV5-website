@@ -1,14 +1,13 @@
 -- 003: ban hamers (1x gebruik) en nep microtransactions
 --
 -- draai dit een keer tegen je bestaande database:
---   psql "postgresql://postgres:meow@localhost:5432/postgres" -f migrations/003_hammers_shop.sql
+--   psql "postgresql://postgres:meow@localhost:5432/meow_utf8" -f migrations/003_hammers_shop.sql
 --
 -- alles hieronder is idempotent, dus tweemaal draaien mag
 
 -- je knoffers, want echt geld is er niet en dat blijft zo
 ALTER TABLE users ADD COLUMN IF NOT EXISTS coins BIGINT NOT NULL DEFAULT 0;
 
--- de ban hamer: 1x gebruiken en dan is hij stuk
 CREATE TABLE IF NOT EXISTS ban_hammers (
     id SERIAL PRIMARY KEY,
     owner_id INT NOT NULL,
@@ -18,10 +17,8 @@ CREATE TABLE IF NOT EXISTS ban_hammers (
     FOREIGN KEY (owner_id) REFERENCES users(id) ON DELETE CASCADE,
     FOREIGN KEY (given_by) REFERENCES users(id)
 );
--- alleen de hamers die nog kunnen slaan, dan is de lookup goedkoop
 CREATE INDEX IF NOT EXISTS ban_hammers_ready_idx ON ban_hammers(owner_id) WHERE uses_left > 0;
 
--- wie is er met een hamer op iemand losgegaan
 CREATE TABLE IF NOT EXISTS ban_hammer_uses (
     id SERIAL PRIMARY KEY,
     hammer_id INT NOT NULL,

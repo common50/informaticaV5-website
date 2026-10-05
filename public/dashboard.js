@@ -6,6 +6,8 @@ const messages = document.getElementById('messages');
 const chatTitle = document.getElementById('chatTitle');
 const messageBox = document.getElementById('messageBox');
 const sendError = document.getElementById('sendError');
+const attachTray = document.getElementById('attachTray');
+const attachInput = document.getElementById('attachInput');
 const peopleSearch = document.getElementById('peopleSearch');
 const chatSearch = document.getElementById('chatSearch');
 const adminSearch = document.getElementById('adminSearch');
@@ -14,6 +16,7 @@ const shopPanel = document.getElementById('shopPanel');
 const shopCoins = document.getElementById('shopCoins');
 const MESSAGE_WRAP_LENGTH = 40;
 const MESSAGE_MAX_LENGTH = 500;
+const MAX_IMAGES_PER_MESSAGE = 4;
 
 let me = null;
 let currentChat = null;
@@ -23,13 +26,14 @@ let teamData = [];
 let adminData = [];
 let adminConvos = [];
 let dmMutes = [];
+let adminCatalog = [];
 let selectedAdminId = null;
 let chatSig = '';
 let lastChatSearch = '';
 let lastAdminSig = '';
 let lastRender = { key: '', lastId: 0 };
 
-let bugs = null;
+let bugs = 'none';
 let quality = 'high';
 let revenue = 9999999;
 
@@ -88,7 +92,7 @@ function showView(name) {
       renderPeople();
     } else if (name === 'admin') {
       chatTitle.textContent = 'moderatie 🛡️';
-      renderAdmin();
+      loadAdminCatalog().then(renderAdmin);
     } else if (name === 'shop') {
       chatTitle.textContent = 'winkel 🛍️';
       renderShop();
@@ -189,6 +193,18 @@ async function renderCurrent(rows) {
     meow.className = mine ? 'message sent' : 'message received';
     meow.textContent = m.content;
 
+    if (m.content && m.image_ids?.length) meow.classList.add('has-images');
+
+    for (const id of m.image_ids ?? []) {
+      const pic = document.createElement('img');
+      pic.className = 'message-image';
+      pic.src = `/api/images/${id}`;
+      pic.alt = 'afbeelding';
+      pic.loading = 'lazy';
+      pic.addEventListener('click', () => window.open(`/api/images/${id}`, '_blank', 'noopener'));
+      meow.appendChild(pic);
+    }
+
     if (currentChat.type === 'team' || readOnly) {
       const wie = document.createElement('div');
       wie.className = 'sender';
@@ -237,13 +253,13 @@ async function refreshEverything() {
   await refreshAll();
 }
 
-async function renderChatLists(dms, teams) {
+async function renderChatLists(stroopwafels, teams) {
   teamData = teams;
   await loadFriends();
-  if (!dms) dms = await fetchDms();
+  if (!stroopwafels) stroopwafels = await fetchDms();
 
   const sig = teams.map((t) => `${t.id}:${t.joined}`).join(',') + '|' +
-    (dms.length ? `${dms.length}:${dms[dms.length - 1].id}` : '0');
+    (stroopwafels.length ? `${stroopwafels.length}:${stroopwafels[stroopwafels.length - 1].id}` : '0');
   const q = chatSearch.value.trim().toLowerCase();
   if (sig === chatSig && q === lastChatSearch) return;
   chatSig = sig;
@@ -253,9 +269,9 @@ async function renderChatLists(dms, teams) {
   for (const f of friendData.friends) {
     if (!chats.has(f.other_id)) chats.set(f.other_id, f.other_username);
   }
-  for (const m of dms) {
-    const otherId = m.sender_id === me.id ? m.recipient_id : m.sender_id;
-    if (!chats.has(otherId)) chats.set(otherId, m.other_username ?? `gebruiker ${otherId}`);
+  for (const mimi of stroopwafels) {
+    const otherId = mimi.sender_id === me.id ? mimi.recipient_id : mimi.sender_id;
+    if (!chats.has(otherId)) chats.set(otherId, mimi.other_username ?? `gebruiker ${otherId}`);
   }
 
   chatList.innerHTML = '';
@@ -376,6 +392,46 @@ function wrapMessageBox() {
   resizeMessageBox();
 }
 
+let pendingImages = [];
+
+function renderAttachTray() {
+  attachTray.innerHTML = '';
+  attachTray.classList.toggle('hidden', pendingImages.length === 0);
+  pendingImages.forEach((img, i) => {
+    const chip = document.createElement('div');
+    chip.className = 'attach-chip';
+    const pic = document.createElement('img');
+    pic.src = `/api/images/${img.id}`;
+    pic.alt = '';
+    chip.append(pic, btn('✕', 'ghost', () => {
+      pendingImages.splice(i, 1);
+      renderAttachTray();
+    }));
+    attachTray.appendChild(chip);
+  });
+}
+
+async function uploadImages(files) {
+  const room = MAX_IMAGES_PER_MESSAGE - pendingImages.length;
+  if (room <= 0) return showSendError(`max ${MAX_IMAGES_PER_MESSAGE} plaatjes per bericht`);
+
+  for (const file of [...files].slice(0, room)) {
+    hideSendError();
+    const res = await fetch('/api/images', {
+      method: 'POST',
+      headers: { 'Content-Type': file.type },
+      body: file
+    });
+    if (!res.ok) {
+      const fout = await res.json().catch(() => ({}));
+      showSendError(fout.error ?? 'uploaden mislukt');
+      continue;
+    }
+    pendingImages.push(await res.json());
+  }
+  renderAttachTray();
+}
+
 function showSendError(text) {
   sendError.textContent = text;
   sendError.classList.remove('hidden');
@@ -388,15 +444,16 @@ function hideSendError() {
 
 async function stuurMsg() {
   const content = messageBox.value.trim();
-  if (!content || !currentChat || currentChat.type === 'watch') return;
+  const imageIds = pendingImages.map((i) => i.id);
+  if ((!content && imageIds.length === 0) || !currentChat || currentChat.type === 'watch') return;
   hideSendError();
 
   const url = currentChat.type === 'team'
     ? `/api/teams/${currentChat.id}/messages`
     : '/api/personal-messages';
   const body = currentChat.type === 'team'
-    ? { content }
-    : { recipient_id: currentChat.otherId, content };
+    ? { content, image_ids: imageIds }
+    : { recipient_id: currentChat.otherId, content, image_ids: imageIds };
 
   const res = await api(url, {
     method: 'POST',
@@ -412,6 +469,8 @@ async function stuurMsg() {
   }
 
   messageBox.value = '';
+  pendingImages = [];
+  renderAttachTray();
   resizeMessageBox();
   refreshAll();
 }
@@ -447,32 +506,20 @@ function btn(text, cls, onClick) {
   return b;
 }
 
-//````` cosmetics ```````
-//
-// de server stuurt per user een { slot: { key, value } } mee. die slaan we
-// hier op in een cache, zodat nameSpan ze alleen maar hoeft op te zoeken en
-// niet elke plek waar een naam getekend wordt hoeft te weten waar de data
-// vandaan komt
 
 const cosmeticCache = new Map();
 const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
 
-// onthoud wat iemand draagt. het mag weg, dan valt iemand gewoon terug op
-// een kale naam
 function rememberCosmetics(userId, cosmetics) {
   if (userId == null) return;
   if (!cosmetics || Object.keys(cosmetics).length === 0) cosmeticCache.delete(userId);
   else cosmeticCache.set(userId, cosmetics);
 }
 
-// onthoud voor een hele lijst, bijv { id_cosmetics } bij id
 function rememberAll(rows, idField = 'id') {
   for (const row of rows) rememberCosmetics(row[idField], row[`${idField}_cosmetics`]);
 }
 
-// de kleuren komen van de server, dus controleer ze toch even voordat we
-// ze in de style zetten. textShadow accepteert elk raaksel van css, en dat
-// willen we niet in een naam
 function applyCosmetics(el, cosmetics) {
   if (!cosmetics) return el;
 
@@ -495,8 +542,6 @@ function nameSpan(text, onClick, userId) {
   return n;
 }
 
-// maakt een naam met de cosmetics erop. los van nameSpan, want die wijnter
-// moet een proefje kunnen tonen van hoe je naam eruitziet
 function styledName(text, cosmetics) {
   const n = document.createElement('span'); // ik heb geen idee welke letter ik moet gebruiken ik doe wat goed voelt
   n.className = 'name';
@@ -661,14 +706,14 @@ async function renderAdminLists() {
   renderAdminPanel();
 }
 
-async function moderatie(url, options) {
-  await api(url, options);
-  await renderAdminLists();
+async function loadAdminCatalog() {
+  if (adminCatalog.length > 0) return;
+  adminCatalog = (await json(await api('/api/shop')))?.items ?? [];
 }
 
 function renderAdminUsers() {
   const q = adminSearch.value.trim().toLowerCase();
-  const key = adminData.map((u) => `${u.id}${u.is_muted ? 'm' : ''}${u.is_banned ? 'b' : ''}`).join(',') + '|' + q + '|' + selectedAdminId;
+  const key = adminData.map((u) => `${u.id}${u.is_muted ? 'm' : ''}${u.is_banned ? 'b' : ''}${u.coins}${u.hammers}${u.owned.length}`).join(',') + '|' + q + '|' + selectedAdminId;
   if (key === lastAdminSig) return;
   lastAdminSig = key;
 
@@ -706,9 +751,19 @@ function renderAdmin() {
   renderAdminPanel();
 }
 
-async function moderatie(url, options) {
-  await api(url, options);
+async function moderatie(url, options, body) {
+  const res = await api(url, {
+    ...options,
+    headers: body ? { 'Content-Type': 'application/json' } : undefined,
+    body: body ? JSON.stringify(body) : undefined
+  });
+  if (res && !res.ok) {
+    const data = await res.json().catch(() => null);
+    alert(data?.error ?? 'iets ging mis 😿');
+    return false;
+  }
   await renderAdminLists();
+  return true;
 }
 
 function reasonPrompt() {
@@ -766,6 +821,36 @@ function renderAdminPanel() {
     }));
   }
 
+  adminPanel.appendChild(label('poespunten'));
+
+  const plus = btn('geven', 'primary', () => coinsPrompt(u, 1));
+  const min = btn('afpakken', 'danger', () => coinsPrompt(u, -1));
+  adminPanel.appendChild(itemRow(`${u.coins} 🪙`, 'geven of afpakken', coinButtons(plus, min)));
+
+  adminPanel.appendChild(label('spul'));
+
+  const spul = [];
+  for (const owned of u.owned) {
+    const item = adminCatalog.find((c) => c.key === owned.key);
+    if (item) spul.push({ ...item, equipped: owned.equipped });
+  }
+  if (u.hammers > 0) spul.push({ key: 'ban_hammer', name: '🔨 ban hammer', grant: 'ban_hammer', blurb: `${u.hammers} in bezit` });
+
+  if (spul.length === 0) {
+    adminPanel.appendChild(emptyBox('niets om af te pakken 😿'));
+  } else {
+    for (const item of spul) {
+      adminPanel.appendChild(
+        rowCard(item.name, item.equipped ? 'gedragen' : (item.blurb ?? 'in bezit'), 'afpakken', 'danger', async () => {
+          if (!confirm(`${item.name} van ${u.username} afpakken?`)) return;
+          if (await moderatie(`/api/admin/users/${u.id}/items`, { method: 'DELETE' }, { item_key: item.key })) {
+            if (item.equipped) rememberCosmetics(u.id, null);
+          }
+        })
+      );
+    }
+  }
+
   adminPanel.appendChild(label('gesprekken'));
 
   const convos = adminConvos;
@@ -806,6 +891,21 @@ function renderAdminPanel() {
   }
 }
 
+function coinButtons(plus, min) {
+  const wrap = document.createElement('span');
+  wrap.className = 'buttons';
+  wrap.append(plus, min);
+  return wrap;
+}
+
+async function coinsPrompt(u, sign) {
+  const invoer = prompt(`hoeveel poespunten ${sign > 0 ? 'geven' : 'afpakken'}?`, '500');
+  if (invoer === null) return;
+  const amount = Number(invoer);
+  if (!Number.isInteger(amount) || amount <= 0) return alert('je hé wat denk je wel, kies een geheel getal groter dan 0');
+  await moderatie(`/api/admin/users/${u.id}/coins`, { method: 'POST' }, { amount: amount * sign });
+}
+
 function mutedInThread(a, b, userId) {
   return dmMutes.some((m) => m.thread_key === threadKey(a, b) && m.user_id === userId);
 }
@@ -827,7 +927,7 @@ function rowCard(title, sub, action, cls, onClick) {
 }
 
 // zelfde rij maar dan met een knop die je al hebt gemaakt, want sommige
-// knoppen moeten disabled kunnen zijn en dat kan rowCard niet
+// knoppen moeten disabled kunnen zijn en dat kan rowCard niet om een een of andere reden
 function itemRow(title, sub, actionBtn) {
   const d = document.createElement('div');
   d.className = 'setting-row';
@@ -841,7 +941,6 @@ function itemRow(title, sub, actionBtn) {
   return d;
 }
 
-//````` winkel ```````
 
 let shopData = { items: [], coins: 0, hammers: [], cosmetics: [], equipped: {}, history: [] };
 
@@ -849,7 +948,6 @@ async function loadShop() {
   const data = await json(await api('/api/shop'));
   if (!data) return;
   shopData = data;
-  // je eigen cosmetics, zodat je eigen naam in de interface ook mooi is
   rememberCosmetics(me?.id, data.equipped);
 }
 
@@ -879,7 +977,6 @@ async function renderShop() {
   const owned = new Set(shopData.cosmetics.map((c) => c.item_key));
   const isOn = (item) => shopData.equipped[item.slot]?.key === item.key;
 
-  // cosmetic uitleggen wat er is, per slot, en dan wat je al hebt
   shopPanel.appendChild(label('mijn uiterlijk'));
 
   const slots = [...new Set(shopData.items.filter((i) => i.slot).map((i) => i.slot))];
@@ -900,7 +997,6 @@ async function renderShop() {
     }
   }
 
-  // en dan de dingen die geen uiterlijk zijn
   shopPanel.appendChild(label('spul'));
   for (const item of shopData.items.filter((i) => !i.slot)) {
     const koop = btn(`koop 🪙${item.price}`, 'primary', () => koopItem(item.key));
@@ -909,11 +1005,11 @@ async function renderShop() {
   }
 
   const hammers = shopData.hammers.filter((h) => Number(h.uses_left) > 0);
-  shopPanel.appendChild(label(`ban hamers (${hammers.length} klaar)`));
-  if (hammers.length === 0) shopPanel.appendChild(emptyBox('geen hamers 😿'));
+  shopPanel.appendChild(label(`ban hammers (${hammers.length} klaar)`));
+  if (hammers.length === 0) shopPanel.appendChild(emptyBox('geen hammers 😿'));
   for (const h of hammers) {
     shopPanel.appendChild(
-      rowCard('🔨 ban hamer', `nog ${Number(h.uses_left)} keer slaan`, 'gebruiken', 'danger', () =>
+      rowCard('🔨 ban hammer', `nog ${Number(h.uses_left)} keer lekker klappen`, 'gebruiken', 'danger', () =>
         promptHammer(h.id)
       )
     );
@@ -922,11 +1018,10 @@ async function renderShop() {
 
 function slotLabel(slot) {
   const naam = { name_color: 'naamkleur', glow: 'gloed', frame: 'frame' }[slot] ?? slot;
-  return label(`${naam} · maximaal 1 aan`);
+  return label(`${naam} - maximaal 1 aan`);
 }
 
-// een rij voor een cosmetic, met een proefje van hoe je naam er dan uitziet
-function cosmetiekRow(item, actie) {
+function cosmetiekRow(item, actie) { // heet dat zo in nl?? ach ja
   const rij = document.createElement('div');
   rij.className = 'setting-row';
 
@@ -935,7 +1030,7 @@ function cosmetiekRow(item, actie) {
   h4.append(styledName('voorbeeld', { [item.slot]: { key: item.key, value: item.value } }));
 
   const p = document.createElement('p');
-  p.textContent = `${item.blurb ?? ''} · 🪙${item.price}`;
+  p.textContent = `${item.blurb ?? ''} - 🪙${item.price}`;
 
   box.append(h4, p);
   rij.append(box, actie);
@@ -943,9 +1038,9 @@ function cosmetiekRow(item, actie) {
 }
 
 function promptHammer(hammerId) {
-  const doel = prompt('aan wie wil je slaan? geef het gebruikers-id', '');
+  const doel = prompt('aan wie wil je slaan? geef de gebruikersnaam', '');
   if (!doel) return;
-  postVerzoek(`/api/hammer/${hammerId}/use`, { target_id: Number(doel) }).then((data) => {
+  postVerzoek(`/api/hammer/${hammerId}/use`, { username: doel.trim() }).then((data) => {
     if (data) alert('de hamer is gevallen 🫡');
     renderShop();
   });
@@ -957,8 +1052,6 @@ async function koopItem(key) {
 }
 
 async function toggleCosmetics(key, isOn) {
-  // equipped is de enige waarheid en die komt hier terug, dus gewoon opnieuw
-  // de winkel binnenhalen
   const done = await postVerzoek(`/api/cosmetics/${isOn ? 'unequip' : 'equip'}`, { item_key: key });
   if (done) await renderShop();
 }
@@ -967,6 +1060,18 @@ async function toggleCosmetics(key, isOn) {
 peopleSearch.addEventListener('input', renderPeople);
 chatSearch.addEventListener('input', () => { chatSig = ''; refreshAll(); });
 adminSearch.addEventListener('input', renderAdminUsers);
+
+document.getElementById('attachBtn').addEventListener('click', () => attachInput.click());
+attachInput.addEventListener('change', () => {
+  uploadImages(attachInput.files);
+  attachInput.value = '';
+});
+messageBox.addEventListener('paste', (e) => {
+  const files = [...(e.clipboardData?.files ?? [])].filter((f) => f.type.startsWith('image/'));
+  if (files.length === 0) return;
+  e.preventDefault();
+  uploadImages(files);
+});
 
 document.getElementById('sendBtn').addEventListener('click', stuurMsg);
 messageBox.addEventListener('input', wrapMessageBox);

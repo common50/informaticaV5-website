@@ -104,7 +104,10 @@
 
             <div class="composer hidden" id="composer">
                 <div class="send-error hidden" id="sendError"></div>
+                <div class="attach-tray hidden" id="attachTray"></div>
                 <div class="message-input">
+                    <button class="attach-btn" id="attachBtn" title="plaatje toevoegen" type="button">📎</button>
+                    <input type="file" id="attachInput" accept="image/png,image/jpeg,image/gif,image/webp" multiple hidden>
                     <textarea id="messageBox" rows="1" maxlength="500" placeholder="typ typ typ typ"></textarea>
                     <button id="sendBtn">verstuur</button>
                 </div>

@@ -7,7 +7,8 @@
 
 -- dit bestand is de complete stand voor een NIEUWE database
 -- voor een bestaande database draai je migrations/002_chats.sql,
--- migrations/003_hammers_shop.sql en daarna migrations/004_cosmetics.sql
+-- migrations/003_hammers_shop.sql, migrations/004_cosmetics.sql
+-- en migrations/005_images.sql
 
 -- test acc en ww:
 -- mittens: iLoveF1sh!
@@ -190,3 +191,33 @@ CREATE TABLE user_cosmetics (
 -- per slot maximaal een dragen
 CREATE UNIQUE INDEX user_cosmetics_one_per_slot ON user_cosmetics(user_id, slot) WHERE equipped;
 CREATE INDEX user_cosmetics_equipped_idx ON user_cosmetics(user_id) WHERE equipped;
+
+-- afbeeldingen, het bestand zelf staat in uploads/
+CREATE TABLE images (
+    id SERIAL PRIMARY KEY,
+    uploader_id INT NOT NULL,
+    filename VARCHAR(80) UNIQUE NOT NULL,
+    mime VARCHAR(30) NOT NULL,
+    byte_size INT NOT NULL,
+    created_at TIMESTAMP DEFAULT NOW(),
+    FOREIGN KEY (uploader_id) REFERENCES users(id) ON DELETE CASCADE
+);
+CREATE INDEX images_uploader_idx ON images(uploader_id);
+
+CREATE TABLE dm_message_images (
+    message_id INT NOT NULL,
+    image_id INT NOT NULL,
+    position INT NOT NULL DEFAULT 0,
+    PRIMARY KEY (message_id, image_id),
+    FOREIGN KEY (message_id) REFERENCES personal_messages(id) ON DELETE CASCADE,
+    FOREIGN KEY (image_id) REFERENCES images(id) ON DELETE CASCADE
+);
+
+CREATE TABLE team_message_images (
+    message_id INT NOT NULL,
+    image_id INT NOT NULL,
+    position INT NOT NULL DEFAULT 0,
+    PRIMARY KEY (message_id, image_id),
+    FOREIGN KEY (message_id) REFERENCES team_messages(id) ON DELETE CASCADE,
+    FOREIGN KEY (image_id) REFERENCES images(id) ON DELETE CASCADE
+);

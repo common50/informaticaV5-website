@@ -1,3 +1,5 @@
+// dit is binnen iets van 8 commits opeens een giga file geworden ik moet dit zo ff opsplitsen als ik tijd en zin heb
+
 require('dotenv').config({ quiet: true });
 const express = require('express');
 const { Pool } = require('pg');
@@ -14,7 +16,7 @@ const SESSION_DAYS = 30;
 
 // de gouden gebruiker, die is altijd admin
 const ADMIN_USERNAME = 'whiskers';
-const ADMIN_BAN_NOPE = 'leuk geprobeerd, maar jij bent nog steeds mijn pion, en ik jouw manipulator. dismissed';
+const ADMIN_BAN_NOPE = 'leuk geprobeerd, maar jij bent nog steeds mijn pion, en ik jouw manipulator. dismissed. ';
 const BOETE = 1000;
 
 const UPLOAD_DIR = path.join(__dirname, '..', 'uploads');
@@ -30,20 +32,11 @@ const IMAGE_TYPES = {
   'image/webp': { ext: 'webp', magic: [[0x52, 0x49, 0x46, 0x46], null, [0x57, 0x45, 0x42, 0x50]] }
 };
 
-//````` de winkel ``````
-//
-// dit is de hele catalogus, dus prijzen aanpassen doe je hier en nergens anders.
-// elk item heeft een key (die in de database staat), een naam en een prijs.
-// 'grant' zegt wat er bij een aankoop gebeurt, 'blurb' is voor de winkelruit.
-
-// key moet overal hetzelfde blijven, anders ziet de database het niet als hetzelfde item
 const SHOP_ITEMS = [
   { key: 'ban_hammer', name: '🔨 ban hamer', price: 5000, grant: 'ban_hammer', blurb: '1x gebruiken en dan is hij stuk' }
 ];
 
-// cosmetics zijn de uiterlijke dingen, je koopt ze en doet ze aan.
-// per slot (name_color, glow, frame) mag er maar eentje tegelijk aan staan,
-// de database regelt dat met een partial unique index.
+// een hele hoop bullshit:
 const COSMETICS = [
   { key: 'name_red', name: 'rode naam', slot: 'name_color', price: 500, value: { color: '#e5484d' }, blurb: 'jouw naam in het rood' },
   { key: 'name_green', name: 'groene naam', slot: 'name_color', price: 500, value: { color: '#3fa04f' }, blurb: 'groen, want groen' },
@@ -59,7 +52,7 @@ const COSMETICS = [
 
 // de kleuren en klassen uit de catalogus gaan naar de client, dus zorg dat
 // het alleen maar kleuren zijn. als hier ooit iets anders in value komt te
-// staan dan vangt deze het alsnog af
+// staan dan vangt deze het alsnog af (ik heb dit gedaan mbv AI)
 const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
 
 
@@ -222,7 +215,7 @@ app.get('/api/me', (req, res) => {
   res.json({ user: req.user });
 });
 
-//`````` pb ding ``````
+// pb ding
 
 app.get('/api/personal-messages', requireAuth, async (req, res) => {
   const me = req.user.id;
@@ -279,7 +272,7 @@ app.post('/api/personal-messages', requireAuth, async (req, res) => {
   }
 });
 
-//`````` gebruikers zoeken (voor de vrienden-dingen) ``````
+// gebruikers zoeken (voor de vrienden-dingen)
 
 app.get('/api/users', requireAuth, async (req, res) => {
   try {
@@ -574,7 +567,9 @@ app.post('/api/teams/:id/messages', requireAuth, async (req, res) => {
   }
 });
 
-
+// dit heb ik van documentatie ik moet nog ff uitzoeken hoe sniffing werkt
+// dit geldt trouwens voor het gehele foto's erbij doen, ik zal kijken of ik de link
+// naar de tutorial nog kan vinden....
 function sniffImageType(buf) {
   for (const [mime, spec] of Object.entries(IMAGE_TYPES)) {
     let at = 0;
@@ -627,13 +622,13 @@ app.post('/api/images', requireAuth, express.raw({
   const claimed = String(req.headers['content-type'] ?? '').split(';')[0].trim().toLowerCase();
   if (!Buffer.isBuffer(buf) || buf.length === 0) {
     if (claimed && !IMAGE_TYPES[claimed]) {
-      return res.status(415).json({ error: 'alleen png, jpg, gif en webp' });
+      return res.status(415).json({ error: 'alleen png, jpg, gif en webp!!' });
     }
     return res.status(400).json({ error: 'geen afbeelding ontvangen' });
   }
   const mime = sniffImageType(buf);
   if (!mime) {
-    return res.status(415).json({ error: 'alleen png, jpg, gif en webp' });
+    return res.status(415).json({ error: 'alleen png, jpg, gif en webp!!!' });
   }
 
   const usage = await pool.query(
@@ -642,7 +637,7 @@ app.post('/api/images', requireAuth, express.raw({
   );
   const used = usage.rows[0];
   if (Number(used.count) >= MAX_IMAGES_PER_USER) {
-    return res.status(413).json({ error: `je hebt al ${MAX_IMAGES_PER_USER} plaatjes, ruim wat op` });
+    return res.status(413).json({ error: `je hebt al ${MAX_IMAGES_PER_USER} plaatjes, ruim wat op: straks gaat mijn db naar de maan!` });
   }
   if (Number(used.bytes) + buf.length > MAX_IMAGE_BYTES_PER_USER) {
     const vrije = Math.max(0, MAX_IMAGE_BYTES_PER_USER - Number(used.bytes));
@@ -662,15 +657,16 @@ app.post('/api/images', requireAuth, express.raw({
   } catch (err) {
     fs.rm(path.join(UPLOAD_DIR, filename), { force: true }, () => {});
     console.error(err);
-    res.status(500).json({ error: 'opslaan mislukt' });
+    res.status(500).json({ error: 'oei oei oeiii: opslaan mislukt' });
   }
 });
 
 app.get('/api/images/:id', requireAuth, async (req, res) => {
   try {
     const id = Number(req.params.id);
-    if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: 'geen geldige id' });
+    if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: 'id is fout ofz ik weet het niet :(' });
 
+    // ik stop overal gewoon maar sql queries in ik weet het zelf ook niet meer
     const result = await pool.query(
       `SELECT i.filename, i.mime, i.byte_size
        FROM images i
@@ -713,7 +709,7 @@ app.get('/api/images/:id', requireAuth, async (req, res) => {
 app.delete('/api/images/:id', requireAuth, async (req, res) => {
   try {
     const id = Number(req.params.id);
-    if (!Number.isInteger(id)) return res.status(400).json({ error: 'geen geldige id' });
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'id is fout ofz ik weet het niet :(' });
 
     const result = await pool.query(
       'DELETE FROM images WHERE id = $1 AND uploader_id = $2 RETURNING filename',
@@ -752,9 +748,8 @@ app.post('/api/images/sweep', requireAuth, async (req, res) => {
 });
 
 
-//````` winkel, cosmetic uitlezen ``````
-
-// alles wat te koop is, dus gewone items plus cosmetics
+// ik weet niet wat al die puntjes betekenen maar ja zo moest het blijkbaar dus ik doe het gwn
+// zolang het maar werkt...
 function shopCatalog() {
   return [...SHOP_ITEMS, ...COSMETICS.map((c) => ({ ...c, grant: 'cosmetic' }))];
 }
@@ -767,9 +762,6 @@ function cosmeticByKey(key) {
   return COSMETICS.find((c) => c.key === key) ?? null;
 }
 
-// { name_color: 'name_red' } -> { name_color: { key: 'name_red', value: { color: '#e5484d' } } }
-// dit is wat de client nodig heeft om iets te tekenen, dus hier vertalen we
-// de key uit de database naar wat het eigenlijk is
 function describeEquipped(keys) {
   const out = {};
   for (const [slot, key] of Object.entries(keys ?? {})) {
@@ -790,9 +782,7 @@ async function equippedCosmetics(userId) {
   return describeEquipped(Object.fromEntries(result.rows.map((r) => [r.slot, r.item_key])));
 }
 
-// voor lijsten: haal in een keer de cosmetics van alle users op en plak ze
-// eraan. je kunt zelf meerdere id velden meegeven, elk krijgt een veld erbij
-// zoals 'other_id' -> 'other_id_cosmetics'
+
 async function attachCosmetics(rows, idFields) {
   const ids = new Set();
   for (const field of idFields) {
@@ -827,9 +817,6 @@ function grantItem(client, item, userId, grantedBy) {
       .then((r) => r.rows[0]);
   }
   if (item.grant === 'cosmetic') {
-    // bezit blijft, dus als je hem al had staan we gewoon niets te doen.
-    // de slot nemen we uit de catalogus, maar alleen als hij niet gedragen
-    // wordt: een gedragen item verhuizen zou de unique index kunnen klappen
     return client
       .query(
         `INSERT INTO user_cosmetics (user_id, item_key, slot) VALUES ($1, $2, $3)
@@ -899,7 +886,8 @@ app.post('/api/shop/buy', requireAuth, async (req, res) => {
   try {
     await client.query('BEGIN');
 
-    // cosmetic heb je al? dan koop je hem niet nog een keer
+    // cosmetic heb je al? dan koop je hem toch niet nog een keer?!
+    // helaas moet ik er van uit gaan dat de user niet veel slimmer is dan een dode rups
     if (item.grant === 'cosmetic') {
       const owned = await client.query(
         'SELECT 1 FROM user_cosmetics WHERE user_id = $1 AND item_key = $2',
@@ -945,8 +933,6 @@ app.post('/api/shop/buy', requireAuth, async (req, res) => {
   }
 });
 
-//````` cosmetic aan en uitdoen ```````
-
 app.post('/api/cosmetics/equip', requireAuth, async (req, res) => {
   const cosmetic = cosmeticByKey(String(req.body?.item_key ?? ''));
   if (!cosmetic) return res.status(400).json({ error: 'onbekende cosmetic' });
@@ -964,20 +950,12 @@ app.post('/api/cosmetics/equip', requireAuth, async (req, res) => {
       return res.status(403).json({ error: 'die heb je niet, koop hem eerst 😿' });
     }
 
-    // eerst het slot uit de catalogus wegschrijven, dan pas omzetten. zo repareert
-    // een item dat in server.js naar een ander slot is verhuist zichzelf.
-    // equipped gaat hierbij ook even uit, anders zou de unique index kunnen
-    // klappen als je een gedragen item naar een slot verhuist waar al iets
-    // gedragen wordt. twee stappen verder zetten we het weer aan
     await client.query(
       `INSERT INTO user_cosmetics (user_id, item_key, slot, equipped) VALUES ($1, $2, $3, FALSE)
        ON CONFLICT (user_id, item_key) DO UPDATE SET slot = EXCLUDED.slot, equipped = FALSE`,
       [req.user.id, cosmetic.key, cosmetic.slot]
     );
 
-    // twee losse statements, in deze volgorde. in een enkele update zou de
-    // unique index kunnen klappen omdat hij niet weet welke rij hij als
-    // eerste tegenkomt
     await client.query(
       'UPDATE user_cosmetics SET equipped = FALSE WHERE user_id = $1 AND slot = $2',
       [req.user.id, cosmetic.slot]
@@ -1010,24 +988,30 @@ app.post('/api/cosmetics/unequip', requireAuth, async (req, res) => {
     res.json({ ok: true, equipped: await equippedCosmetics(req.user.id) });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: 'uitdoen mislukt' });
+    res.status(500).json({ error: 'uitdoen mislukt op een 1 of andere manier, dit zou niet mogelijk moeten zijn' });
   }
 });
 
 app.post('/api/hammer/:id/use', requireAuth, async (req, res) => {
-  const targetId = Number(req.body?.target_id);
-  if (!Number.isInteger(targetId)) return res.status(400).json({ error: 'op wie?' });
-  if (targetId === req.user.id) return res.status(400).json({ error: 'doe maar niet aan jezelf' });
+  const targetName = String(req.body?.username ?? '').trim();
+  if (!targetName) return res.status(400).json({ error: 'op wie?' });
+  if (targetName.toLowerCase() === req.user.username.toLowerCase()) {
+    return res.status(400).json({ error: 'doe maar niet aan jezelf' });
+  }
 
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
 
-    const target = await client.query('SELECT id, username, is_admin FROM users WHERE id = $1', [targetId]);
+    const target = await client.query(
+      'SELECT id, username, is_admin FROM users WHERE LOWER(username) = LOWER($1)',
+      [targetName]
+    );
     if (target.rows.length === 0) {
       await client.query('ROLLBACK');
       return res.status(404).json({ error: 'die user bestaat niet' });
     }
+    const targetId = target.rows[0].id;
     if (isProtected(target.rows[0])) {
       const over = await straf(client, req.user.id);
       await client.query('COMMIT');
@@ -1082,19 +1066,36 @@ async function withImages(rows, table) {
   return rows;
 }
 
-//`````` moderatie, alleen voor de admin (whiskers) ``````
+// moderatie, alleen voor de admin (whiskers)
 
 app.get('/api/admin/users', requireAdmin, async (req, res) => {
   try {
-    const result = await pool.query(
-      `SELECT u.id, u.username, u.email, u.is_admin, u.coins,
-              EXISTS (SELECT 1 FROM bans b WHERE b.user_id = u.id) AS is_banned,
-              (SELECT b.reason FROM bans b WHERE b.user_id = u.id) AS ban_reason,
-              EXISTS (SELECT 1 FROM mutes m WHERE m.user_id = u.id) AS is_muted,
-              (SELECT m.reason FROM mutes m WHERE m.user_id = u.id) AS mute_reason,
-              (SELECT COUNT(*) FROM ban_hammers bh WHERE bh.owner_id = u.id) AS hammers
-       FROM users u ORDER BY u.username`
-    );
+    const [result, cosmeticRows, hammerRows] = await Promise.all([
+      pool.query(
+        `SELECT u.id, u.username, u.email, u.is_admin, u.coins,
+                EXISTS (SELECT 1 FROM bans b WHERE b.user_id = u.id) AS is_banned,
+                (SELECT b.reason FROM bans b WHERE b.user_id = u.id) AS ban_reason,
+                EXISTS (SELECT 1 FROM mutes m WHERE m.user_id = u.id) AS is_muted,
+                (SELECT m.reason FROM mutes m WHERE m.user_id = u.id) AS mute_reason
+         FROM users u ORDER BY u.username`
+      ),
+      pool.query('SELECT user_id, item_key, equipped FROM user_cosmetics ORDER BY acquired_at'),
+      pool.query('SELECT owner_id, COUNT(*)::int AS count FROM ban_hammers GROUP BY owner_id')
+    ]);
+
+    const owned = new Map();
+    for (const row of cosmeticRows.rows) {
+      if (!owned.has(row.user_id)) owned.set(row.user_id, []);
+      owned.get(row.user_id).push({ key: row.item_key, equipped: row.equipped });
+    }
+    const hammers = new Map(hammerRows.rows.map((r) => [r.owner_id, r.count]));
+
+    for (const row of result.rows) {
+      row.coins = Number(row.coins);
+      row.owned = owned.get(row.id) ?? [];
+      row.hammers = hammers.get(row.id) ?? 0;
+    }
+
     res.json(await attachCosmetics(result.rows, ['id']));
   } catch (err) {
     console.error(err);
@@ -1182,39 +1183,6 @@ app.post('/api/admin/users/:id/coins', requireAdmin, async (req, res) => {
   }
 });
 
-app.post('/api/admin/users/:id/items', requireAdmin, async (req, res) => {
-  const item = shopItem(String(req.body?.item_key ?? ''));
-  if (!item) return res.status(400).json({ error: 'onbekend item' });
-
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-
-    const target = await client.query('SELECT id FROM users WHERE id = $1', [req.params.id]);
-    if (target.rows.length === 0) {
-      await client.query('ROLLBACK');
-      return res.status(404).json({ error: 'gebruiker bestaat niet' });
-    }
-
-    await client.query(
-      `INSERT INTO microtransactions (user_id, item_key, item_name, price, granted_by)
-       VALUES ($1, $2, $3, $4, $5)`,
-      [req.params.id, item.key, item.name, 0, req.user.id]
-    );
-
-    const granted = await grantItem(client, item, req.params.id, req.user.id);
-
-    await client.query('COMMIT');
-    res.json({ ok: true, granted, item_key: item.key });
-  } catch (err) {
-    await client.query('ROLLBACK');
-    console.error(err);
-    res.status(500).json({ error: 'geven mislukt' });
-  } finally {
-    client.release();
-  }
-});
-
 app.delete('/api/admin/users/:id/items', requireAdmin, async (req, res) => {
   const item = shopItem(String(req.body?.item_key ?? req.query.item_key ?? ''));
   if (!item) return res.status(400).json({ error: 'onbekend item' });
@@ -1232,7 +1200,7 @@ app.delete('/api/admin/users/:id/items', requireAdmin, async (req, res) => {
     const weggenomen = await revokeItem(client, item, req.params.id);
 
     await client.query('COMMIT');
-    res.json({ ok: true, weggenomen, item_key: item.key });
+    res.json({ ok: true, weggenomen, item_key: item.key, equipped: await equippedCosmetics(req.params.id) });
   } catch (err) {
     await client.query('ROLLBACK');
     console.error(err);
@@ -1341,7 +1309,7 @@ app.get('/api/admin/dm-mutes', requireAdmin, async (req, res) => {
   }
 });
 
-//`````````````````````````````````````````````````````````````````````````````````````````````````````
+
 
 function threadKey(a, b) {
   const x = Number(a);
@@ -1349,7 +1317,7 @@ function threadKey(a, b) {
   return x < y ? `${x}:${y}` : `${y}:${x}`;
 }
 
-// een gemute of verbannen user mag nergens meer iets sturen
+
 async function sendBlock(userId, key) {
   const mute = await pool.query('SELECT reason FROM mutes WHERE user_id = $1', [userId]);
   if (mute.rows.length > 0) {
@@ -1436,8 +1404,7 @@ app.use((err, req, res, next) => {
   next(err);
 });
 
-// even de catalogus controleren, want een tikfout in een kleur of prijs is
-// lastig te vinden als je alleen maar naar een rare naam kijkt
+// if else if else if if if ifi fififi ififif bla bla bla het zal allemaal wel
 function checkCatalog() {
   const seen = new Set();
   for (const item of [...SHOP_ITEMS, ...COSMETICS]) {
@@ -1473,6 +1440,6 @@ app.listen(PORT, async () => {
   try {
     await ensureAdmin();
   } catch (err) {
-    console.error('kon whiskers niet admin maken:', err.message);
+    console.error('kon whiskers niet admin maken (TREK DE STEKKER ERUIT!!!):', err.message);
   }
 });

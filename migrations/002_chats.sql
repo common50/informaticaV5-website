@@ -1,7 +1,7 @@
 -- 002: teams als kanaal, sessies en moderatie
 --
 -- draai dit een keer tegen je bestaande database:
---   psql "postgresql://postgres:meow@localhost:5432/postgres" -f migrations/002_chats.sql
+--   psql "postgresql://postgres:meow@localhost:5432/meow_utf8" -f migrations/002_chats.sql
 --
 -- alles hieronder is idempotent, dus tweemaal draaien mag
 
